@@ -600,18 +600,22 @@ function gx2(dt){const p=ppos();board.visible=!mis;board.userData.m.opacity=.3+M
   mp(dt);mp2(dt);houseStep(dt);gx3(dt);
   if(raceState)txt='<b>'+raceState.kind.toUpperCase()+' RACE</b> · LAP '+Math.min(Math.floor(raceState.checkpoint/LAP_CP.length)+1,LAPS)+'/'+LAPS+' · '+Math.ceil(raceState.countdown>0?raceState.countdown:raceState.elapsed)+' s';
   jobEl.innerHTML=txt+(room?'<br>Online: '+(1+rem.size):'');}
-const rem=new Map(),myHue=(Math.random()*360)|0;let room=null,mpT=0,liveChannel=null;
+const rem=new Map(),myHue=(Math.random()*360)|0;let room=null,mpT=0,liveChannel=null,dbChannel=null,chatPoll=0,rtTry=0;
 const roomCallbacks={};
 function notifyRoom(event,message){for(const fn of roomCallbacks[event]||[])fn(message);}
 async function connectRoom(user){
-  if(liveChannel)await db.removeChannel(liveChannel);
+  if(liveChannel)await db.removeChannel(liveChannel).catch(()=>{});if(dbChannel)await db.removeChannel(dbChannel).catch(()=>{});dbChannel=null;clearInterval(chatPoll);
   for(const event of Object.keys(roomCallbacks))delete roomCallbacks[event];
   sub=0;sub3=0;lastOpt='';mpT=0;
-  const channel=db.channel('afterhours-world',{config:{presence:{key:user.id},broadcast:{self:true}}});
+  const posCache=new Map();const channel=db.channel('afterhours-world',{config:{presence:{key:user.id},broadcast:{self:true}}});
   liveChannel=channel;
   room={
-    peers:()=>Object.entries(channel.presenceState()).flatMap(([peer,items])=>items.map(s=>({peer,kind:'viewer',presence:s,isMe:peer===user.id,sameTab:peer===user.id}))),
-    presence:data=>channel.track(Object.assign({hue:myHue},(channel._ps=Object.assign(channel._ps||{},data)))),
+    peers:()=>Object.entries(channel.presenceState()).flatMap(([peer,items])=>items.map(s=>({peer,kind:'viewer',presence:Object.assign({},s,posCache.get(peer)||{}),isMe:peer===user.id,sameTab:peer===user.id}))),
+    presence:data=>{const ps=channel._ps=Object.assign(channel._ps||{},data);
+      if(!channel._bt)channel._bt=setTimeout(()=>{channel._bt=0;if(channel.state!=='joined')return;channel._bl=Date.now();channel.send({type:'broadcast',event:'pos',payload:Object.assign({sender_id:user.id},channel._ps)}).catch(()=>{});},Math.max(0,125-(Date.now()-(channel._bl||0))));
+      const sig=JSON.stringify([ps.nm,ps.lk,ps.hb]);
+      if(sig!==channel._sig&&!channel._pt)channel._pt=setTimeout(()=>{channel._pt=0;if(channel.state!=='joined')return;channel._sig=sig;channel._pl=Date.now();channel.track({hue:myHue,nm:ps.nm,lk:ps.lk,hb:ps.hb}).catch(()=>{});},Math.max(0,1500-(Date.now()-(channel._pl||0))));
+      return Promise.resolve();},
     on:(event,fn)=>{(roomCallbacks[event]||(roomCallbacks[event]=[])).push(fn);},
     emit:async(event,data)=>{
       if(event==='chat'){
@@ -631,19 +635,25 @@ async function connectRoom(user){
       if(status!=='ok')throw new Error('Realtime broadcast status: '+status);
     }
   };
-  channel.on('presence',{event:'sync'},()=>{const n=Object.keys(channel.presenceState()).length,e=$('onl');if(e)e.textContent='● '+n+' online';});
-  let lbT=0;channel.on('postgres_changes',{event:'*',schema:'public',table:'game_stats'},()=>{clearTimeout(lbT);lbT=setTimeout(()=>{if(mpn.style.display==='block'&&cloudUser)loadLeaderboard();},800);});
+  channel.on('broadcast',{event:'pos'},m=>{const d=m.payload;if(d&&d.sender_id&&d.sender_id!==user.id)posCache.set(d.sender_id,d);});
+  channel.on('presence',{event:'sync'},()=>{for(const k of posCache.keys())if(!channel.presenceState()[k])posCache.delete(k);const n=Object.keys(channel.presenceState()).length,e=$('onl');if(e)e.textContent='● '+n+' online';});
+  let lbT=0;const dbc=db.channel('afterhours-db');dbChannel=dbc;dbc.on('postgres_changes',{event:'*',schema:'public',table:'game_stats'},()=>{clearTimeout(lbT);lbT=setTimeout(()=>{if(mpn.style.display==='block'&&cloudUser)loadLeaderboard();},800);});
   for(const event of['hit','frag','home_inv','race','rwin','race_invite','race_decline','race_accept','race_start','race_finish','cardmg','boom','shot','ride_req','ride_ok','ride_no','steal','steal_ok','steal_no'])channel.on('broadcast',{event},m=>{
     const data=m.payload||{};
     notifyRoom(event,{data,peer:data.sender_id,isMe:data.sender_id===user.id,sameTab:data.sender_id===user.id});
   });
-  channel.on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_messages'},m=>{
+  dbc.on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_messages'},m=>{
     const row=m.new;if(!row)return;
     const peer=room.peers().find(q=>q.peer===row.sender_id),name=peer&&peer.presence.nm;
     notifyRoom('chat',{data:{n:name||'Player '+row.sender_id.slice(-3),t:row.body,to:row.recipient_id},peer:row.sender_id,isMe:row.sender_id===user.id,sameTab:row.sender_id===user.id});
   });
+  let lastSeen=new Date().toISOString();
+  const pollChat=()=>{clearInterval(chatPoll);chatPoll=setInterval(async()=>{if(document.hidden)return;const{data}=await db.from('chat_messages').select('sender_id,recipient_id,body,created_at').gt('created_at',lastSeen).order('created_at').limit(30);if(!data)return;for(const row of data){lastSeen=row.created_at;const peer=room.peers().find(q=>q.peer===row.sender_id);notifyRoom('chat',{data:{n:(peer&&peer.presence.nm)||'Player '+row.sender_id.slice(-3),t:row.body,to:row.recipient_id},peer:row.sender_id,isMe:row.sender_id===user.id,sameTab:row.sender_id===user.id});}},2500);};
+  const startDb=()=>dbc.subscribe(status=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){console.warn('DB realtime unavailable ('+status+'); chat uses polling. Run supabase-schema.sql.');if(liveChannel===channel)pollChat();}});
   channel.subscribe(status=>{
-    if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){console.error('Realtime channel status:',status);toast('Online connection failed.');}
+    if(status==='SUBSCRIBED'){rtTry=0;room.presence({});if(dbChannel===dbc&&dbc.state==='closed')startDb();}
+    if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){console.error('Realtime channel status:',status);
+      if(liveChannel===channel&&rtTry<6){rtTry++;setTimeout(()=>{if(liveChannel===channel&&cloudUser===user)connectRoom(user).catch(()=>{});},2000*rtTry);}}
   });
 }
 function tagS(txt,hue){const c=document.createElement('canvas');c.width=192;c.height=72;const g=c.getContext('2d');g.fillStyle='rgba(8,10,16,.8)';g.fillRect(0,0,192,72);g.fillStyle='#4dd0ff';g.beginPath();g.moveTo(96,3);g.lineTo(80,23);g.lineTo(90,23);g.lineTo(90,30);g.lineTo(102,30);g.lineTo(102,23);g.lineTo(112,23);g.closePath();g.fill();g.fillStyle='hsl('+hue+',80%,65%)';g.font='bold 24px system-ui';g.textAlign='center';g.fillText(txt,96,62);
@@ -1120,7 +1130,7 @@ slider('🎯 Scope aim speed','aim',.3,2.5,.05,x=>x.toFixed(2)+'×');
 {const w=document.createElement('div');w.style.cssText='margin:14px 0 4px';w.innerHTML='🖥️ Graphics <span id="gqt" style="float:right;color:#ffd24a;font-weight:700"></span>';const row=document.createElement('div');row.style.cssText='display:flex;gap:6px;margin-top:6px';
   ['4K','HD','Fast'].forEach((n,k)=>{const b=document.createElement('button');b.className='sbtn';b.style.margin='0';b.textContent=n;b.addEventListener('click',()=>{gq=k;applyGQ(true);toast('Graphics: '+GQ[gq].n);});row.appendChild(b);});w.appendChild(row);stp.appendChild(w);}
 {const d=document.createElement('div');d.style.cssText='margin-top:14px;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.35);font:12px/1.5 system-ui';stp.appendChild(d);
-  setInterval(()=>{if(stp.style.display!=='block')return;const ch=liveChannel;d.innerHTML='🌐 <b>Online status</b><br>Account: '+(cloudUser?'<span style="color:#6bff9a">signed in</span>':'<span style="color:#ff8a8a">NOT signed in (use 👤)</span>')+'<br>Realtime: '+(ch?(ch.state==='joined'?'<span style="color:#6bff9a">connected</span>':'<span style="color:#ffb347">'+ch.state+'</span>'):'<span style="color:#ff8a8a">not connected</span>')+'<br>Players seen: '+(room?room.peers().filter(q=>!q.isMe).length:0)+'<br><span style="opacity:.6">build 9</span>';},700);}
+  setInterval(()=>{if(stp.style.display!=='block')return;const ch=liveChannel;d.innerHTML='🌐 <b>Online status</b><br>Account: '+(cloudUser?'<span style="color:#6bff9a">signed in</span>':'<span style="color:#ff8a8a">NOT signed in (use 👤)</span>')+'<br>Realtime: '+(ch?(ch.state==='joined'?'<span style="color:#6bff9a">connected</span>':'<span style="color:#ffb347">'+ch.state+'</span>'):'<span style="color:#ff8a8a">not connected</span>')+'<br>Players seen: '+(room?room.peers().filter(q=>!q.isMe).length:0)+'<br><span style="opacity:.6">build 10</span>';},700);}
 {const b=document.createElement('button');b.className='sbtn';b.style.marginTop='14px';b.textContent='RESUME';b.addEventListener('click',()=>{stp.style.display='none';});stp.appendChild(b);}
 closeButton(stp);mkBtn('🧭',(innerWidth>=700?212:172)+108,togM);
 document.querySelectorAll('.mb').forEach((b,i)=>{if(innerWidth<600){b.style.right='10px';b.style.top='calc(env(safe-area-inset-top,0px) + '+(160+i*52)+'px)';}});
