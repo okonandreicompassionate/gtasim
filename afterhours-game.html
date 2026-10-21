@@ -26,6 +26,7 @@ body.walk #gauge{display:none}
 #jfix{position:fixed;left:18px;bottom:calc(env(safe-area-inset-bottom,0px) + 108px);width:112px;height:112px;border-radius:50%;display:none;z-index:8;touch-action:none;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.35)}
 #jfix i{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px;border-radius:50%;background:rgba(255,255,255,.4);border:2px solid rgba(255,255,255,.7)}
 body.touch.walk #jfix{display:block}
+@media (max-height:600px){#jobEl{left:50%!important;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 124px)!important;text-align:center;max-width:60vw!important;font-size:10.5px!important;padding:4px 10px!important;opacity:.92}}
 body.walk .b.d{display:none!important}
 #shop{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(88vw,340px);padding:16px;border-radius:18px;display:none;z-index:9;text-align:center;font-size:14px;line-height:1.5}
 #shT{font-size:20px;font-weight:800;margin-bottom:6px}
@@ -159,8 +160,11 @@ const M={black:std({color:0x0e0e0f,roughness:.8}),glass:std({color:0x06090e,roug
  head:std({color:0xffffff,emissive:0xdbeaff,emissiveIntensity:1.6}),tail:std({color:0x550000,emissive:0xff1111,emissiveIntensity:.5}),tailOn:std({color:0xff2222,emissive:0xff2222,emissiveIntensity:2.4}),white:std({color:0xeeeeee}),chrome:std({color:0xbbbbbb,metalness:.9,roughness:.25})};
 M.camo=std({map:camo(),roughness:.7,metalness:.15,envMap:envC,envMapIntensity:.5});
 function box(par,w,h,d,mat,x,y,z,rx=0){const m=new T.Mesh(new T.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.rotation.x=rx;m.castShadow=true;par.add(m);return m;}
+let _tm=null;function treadM(){if(_tm)return _tm;const c=document.createElement('canvas');c.width=256;c.height=64;const x=c.getContext('2d');x.fillStyle='#161616';x.fillRect(0,0,256,64);x.fillStyle='#3a3a3a';for(let i=0;i<32;i++){x.fillRect(i*8,0,3,64);x.fillRect(i*8+3,i%2?8:32,5,24);}x.fillStyle='#0b0b0b';x.fillRect(0,0,256,6);x.fillRect(0,58,256,6);const tx=new T.CanvasTexture(c);tx.anisotropy=4;_tm=new T.MeshStandardMaterial({map:tx,roughness:.95});return _tm;}
 function wheel(g,x,z,r,wd,knobs,hd){const st=new T.Group();st.position.set(x,r,z);g.add(st);const sp=new T.Group();st.add(sp);
-  const t=new T.Mesh(new T.CylinderGeometry(r,r,wd,24),M.tire);t.rotation.z=Math.PI/2;t.castShadow=true;sp.add(t);
+  const t=new T.Mesh(new T.CylinderGeometry(r,r,wd,28),[treadM(),M.tire,M.tire]);t.rotation.z=Math.PI/2;t.castShadow=true;sp.add(t);
+  for(let k=0;k<5;k++){const a=k/5*Math.PI*2,spk=new T.Mesh(new T.BoxGeometry(wd+.035,r*.5,r*.09),M.chrome);spk.position.set(0,Math.cos(a)*r*.34,Math.sin(a)*r*.34);spk.rotation.x=-a;sp.add(spk);}
+  const vs=new T.Mesh(new T.BoxGeometry(wd+.05,r*.12,r*.12),std({color:0xff3b2a}));vs.position.set(0,r*.8,0);sp.add(vs);
   if(knobs)for(let k=0;k<20;k++){const a=k/20*Math.PI*2,kn=new T.Mesh(new T.BoxGeometry(wd+.02,.1,.14),M.tire);kn.position.set(0,Math.cos(a)*(r+.02),Math.sin(a)*(r+.02));kn.rotation.x=-a;sp.add(kn);}
   const rim=new T.Mesh(new T.CylinderGeometry(r*.58,r*.58,wd+.03,knobs?6:10),M.rim);rim.rotation.z=Math.PI/2;sp.add(rim);
   const hub=new T.Mesh(new T.CylinderGeometry(r*.17,r*.17,wd+.06,8),M.chrome);hub.rotation.z=Math.PI/2;sp.add(hub);
@@ -559,15 +563,15 @@ function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;lt=Date.now()
   perfStep(dt);renderer.render(scene,cam);requestAnimationFrame(loop);}
 const GQ=[{n:'4K',pr:mobile?2.5:3,sh:mobile?2048:4096,ev:1},{n:'HD',pr:mobile?1.5:2,sh:2048,ev:1},{n:'Fast',pr:1,sh:1024,ev:2}];
 let gq=+localStorage.ah_gq;if(!(gq>=0&&gq<3))gq=0;let perfN=0,perfA=0,perfF=0,perfBad=0;
-function applyGQ(){const q=GQ[gq];renderer.setPixelRatio(Math.min(devicePixelRatio,q.pr));renderer.setSize(innerWidth,innerHeight);
+function applyGQ(save){const q=GQ[gq];renderer.setPixelRatio(Math.min(devicePixelRatio,q.pr));renderer.setSize(innerWidth,innerHeight);
   if(sun.shadow.mapSize.x!==q.sh){sun.shadow.mapSize.set(q.sh,q.sh);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null;}}
-  renderer.shadowMap.autoUpdate=q.ev===1;localStorage.ah_gq=gq;if(gqb)gqb.textContent='⚙️ '+q.n;}
+  renderer.shadowMap.autoUpdate=q.ev===1;if(save)localStorage.ah_gq=gq;if(gqb){gqb.innerHTML='<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><b style="font-size:10px;letter-spacing:.8px;line-height:1;margin-top:2px">'+q.n.toUpperCase()+'</b>';const c=['#7dffb0','#ffd24a','#ff8a5a'][gq];gqb.style.color=c;gqb.style.borderColor=c;gqb.style.flexDirection='column';gqb.style.gap='0';gqb.style.fontSize='10px';}}
 function perfStep(dt){perfF++;if(GQ[gq].ev>1){renderer.shadowMap.needsUpdate=perfF%GQ[gq].ev===0;}perfA+=dt;perfN++;if(perfN<60)return;const ms=perfA/perfN*1000;perfA=perfN=0;
   if(ms>38&&gq<2){if(++perfBad>=2){perfBad=0;gq++;applyGQ();notify('⚙️ GRAPHICS','Lag detected, switched to '+GQ[gq].n+'. Tap ⚙️ to change.','#ffd24a');}}else perfBad=0;}
-let gqb=null;{const b=document.createElement('div');b.className='mb gl';b.style.right=((innerWidth>=700?212:172)+270)+'px';b.addEventListener('pointerdown',e=>{e.preventDefault();gq=(gq+1)%3;applyGQ();toast('Graphics: '+GQ[gq].n);});document.body.appendChild(b);gqb=b;}
+let gqb=null;{const b=document.createElement('div');b.className='mb gl';b.style.right=((innerWidth>=700?212:172)+270)+'px';b.addEventListener('pointerdown',e=>{e.preventDefault();gq=(gq+1)%3;applyGQ(true);toast('Graphics: '+GQ[gq].n);});document.body.appendChild(b);gqb=b;}
 applyGQ();
 // ---------- v3: jobs + multiplayer (room capability)
-const jobEl=document.createElement('div');jobEl.className='gl';jobEl.style.cssText='position:fixed;left:12px;top:calc(env(safe-area-inset-top,0px) + 162px);padding:6px 10px;border-radius:14px;font-size:11px;line-height:1.5;max-width:52vw;pointer-events:none';document.body.appendChild(jobEl);
+const jobEl=document.createElement('div');jobEl.className='gl';jobEl.id='jobEl';jobEl.style.cssText='position:fixed;left:12px;top:calc(env(safe-area-inset-top,0px) + 162px);padding:6px 10px;border-radius:14px;font-size:11px;line-height:1.5;max-width:52vw;pointer-events:none';document.body.appendChild(jobEl);
 const mkG=new T.CylinderGeometry(3,3,60,14,1,true),rgG=new T.RingGeometry(3.2,4.2,24),dv=new V3();
 function mkMarker(col){const m=new T.MeshBasicMaterial({color:col,transparent:true,opacity:.35,depthWrite:false,side:T.DoubleSide}),g=new T.Group(),c=new T.Mesh(mkG,m);c.position.y=30;const r=new T.Mesh(rgG,m);r.rotation.x=-Math.PI/2;r.position.y=.25;g.add(c,r);g.userData.m=m;scene.add(g);return g;}
 const board=mkMarker(0x3ddc84),wp=mkMarker(0xffd24a);board.position.set(-12.5,0,26);wp.visible=false;
