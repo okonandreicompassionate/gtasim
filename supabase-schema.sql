@@ -184,13 +184,117 @@ begin
 end
 $$;
 
+-- Daily login rewards are claimed atomically so a refresh or a second device
+-- cannot claim the same Lagos calendar day twice.
+alter table public.player_saves
+  add column if not exists weapons jsonb not null default '{}'::jsonb;
+
+create table if not exists public.daily_login_claims (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  last_claim_date date not null,
+  streak_day integer not null check (streak_day > 0),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.daily_login_claims enable row level security;
+revoke all on public.daily_login_claims from anon, authenticated;
+grant select on public.daily_login_claims to authenticated;
+
+drop policy if exists "Players view their own login claim" on public.daily_login_claims;
+create policy "Players view their own login claim"
+  on public.daily_login_claims for select to authenticated
+  using (user_id = (select auth.uid()));
+
+create or replace function public.claim_daily_login_reward(p_claim_date date)
+returns table(claimed boolean, reward bigint, streak_day integer, claim_date date)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_today date := (now() at time zone 'Africa/Lagos')::date;
+  v_last date;
+  v_streak integer;
+  v_reward bigint;
+  v_saved_day text;
+  v_saved_claim text;
+  v_saved_streak text;
+begin
+  if v_user is null then
+    raise exception 'Authentication required';
+  end if;
+  if p_claim_date is distinct from v_today then
+    raise exception 'Daily login claim date is invalid';
+  end if;
+
+  insert into public.player_saves(user_id)
+    values (v_user)
+    on conflict (user_id) do nothing;
+  perform 1 from public.player_saves as ps
+    where ps.user_id = v_user
+    for update;
+
+  select dlc.last_claim_date, dlc.streak_day
+    into v_last, v_streak
+    from public.daily_login_claims as dlc
+    where dlc.user_id = v_user;
+
+  if found and v_last = v_today then
+    return query select false, 0::bigint, v_streak, v_today;
+    return;
+  end if;
+
+  if not found then
+    select ps.weapons->'dy'->>'d', ps.weapons->'dy'->>'cl', ps.weapons->'dy'->>'st'
+      into v_saved_day, v_saved_claim, v_saved_streak
+      from public.player_saves as ps
+      where ps.user_id = v_user;
+    v_streak := case when v_saved_streak ~ '^[0-9]{1,7}$' then v_saved_streak::integer else 1 end;
+    if v_saved_day = v_today::text and v_saved_claim in ('true', '1') then
+      v_streak := greatest(v_streak, 1);
+      insert into public.daily_login_claims(user_id, last_claim_date, streak_day)
+        values (v_user, v_today, v_streak);
+      return query select false, 0::bigint, v_streak, v_today;
+      return;
+    end if;
+    v_streak := case when v_saved_day = (v_today - 1)::text and v_saved_claim in ('true', '1')
+      then greatest(v_streak, 1) + 1 else 1 end;
+  else
+    v_streak := case when v_last = v_today - 1 then v_streak + 1 else 1 end;
+  end if;
+
+  v_reward := case ((v_streak - 1) % 7) + 1
+    when 1 then 20000000
+    when 2 then 30000000
+    when 3 then 40000000
+    when 4 then 60000000
+    when 5 then 80000000
+    when 6 then 100000000
+    else 250000000
+  end;
+
+  insert into public.daily_login_claims(user_id, last_claim_date, streak_day, updated_at)
+    values (v_user, v_today, v_streak, now())
+    on conflict (user_id) do update
+      set last_claim_date = excluded.last_claim_date,
+          streak_day = excluded.streak_day,
+          updated_at = excluded.updated_at;
+  update public.player_saves as ps
+    set cash = ps.cash + v_reward, updated_at = now()
+    where ps.user_id = v_user;
+
+  return query select true, v_reward, v_streak, v_today;
+end
+$$;
+
+revoke all on function public.claim_daily_login_reward(date) from public, anon;
+grant execute on function public.claim_daily_login_reward(date) to authenticated;
+
 -- ============================================================
 -- v8 additions: weapons, kills/deaths, live leaderboard
 -- Safe to re-run (idempotent).
 -- ============================================================
-alter table public.player_saves
-  add column if not exists weapons jsonb not null default '{}'::jsonb;
-
 alter table public.game_stats
   add column if not exists kills integer not null default 0 check (kills >= 0),
   add column if not exists deaths integer not null default 0 check (deaths >= 0),
