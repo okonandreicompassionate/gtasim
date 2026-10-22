@@ -46,6 +46,15 @@ create table if not exists public.chat_messages (
   sent_at timestamptz not null default now()
 );
 
+create table if not exists public.friendships (
+  requester_id uuid not null references auth.users(id) on delete cascade,
+  addressee_id uuid not null references auth.users(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending', 'accepted')),
+  created_at timestamptz not null default now(),
+  primary key (requester_id, addressee_id),
+  check (requester_id <> addressee_id)
+);
+
 create table if not exists public.races (
   id uuid primary key default gen_random_uuid(),
   created_by uuid not null references auth.users(id) on delete cascade,
@@ -68,15 +77,18 @@ alter table public.owned_vehicles enable row level security;
 alter table public.discoveries enable row level security;
 alter table public.game_stats enable row level security;
 alter table public.chat_messages enable row level security;
+alter table public.friendships enable row level security;
 alter table public.races enable row level security;
 alter table public.race_participants enable row level security;
 
 -- Game progression is account-only: guests use no database save path.
 revoke all on public.profiles, public.player_saves, public.owned_vehicles,
   public.discoveries, public.game_stats from anon;
+revoke all on public.friendships from anon;
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update, delete on public.player_saves,
   public.owned_vehicles, public.discoveries, public.game_stats to authenticated;
+grant select, insert, update, delete on public.friendships to authenticated;
 
 drop policy if exists "Profiles are visible to signed-in players" on public.profiles;
 create policy "Profiles are visible to signed-in players"
@@ -120,6 +132,24 @@ drop policy if exists "Players send chat as themselves" on public.chat_messages;
 create policy "Players send chat as themselves"
   on public.chat_messages for insert to authenticated
   with check (sender_id = (select auth.uid()));
+
+drop policy if exists "Players read their friendships" on public.friendships;
+create policy "Players read their friendships"
+  on public.friendships for select to authenticated
+  using (requester_id = (select auth.uid()) or addressee_id = (select auth.uid()));
+drop policy if exists "Players send friend requests" on public.friendships;
+create policy "Players send friend requests"
+  on public.friendships for insert to authenticated
+  with check (requester_id = (select auth.uid()) and status = 'pending');
+drop policy if exists "Players accept friend requests" on public.friendships;
+create policy "Players accept friend requests"
+  on public.friendships for update to authenticated
+  using (addressee_id = (select auth.uid()) and status = 'pending')
+  with check (addressee_id = (select auth.uid()) and status = 'accepted');
+drop policy if exists "Players remove friendships" on public.friendships;
+create policy "Players remove friendships"
+  on public.friendships for delete to authenticated
+  using (requester_id = (select auth.uid()) or addressee_id = (select auth.uid()));
 
 drop policy if exists "Signed-in players read races" on public.races;
 create policy "Signed-in players read races"
@@ -170,6 +200,7 @@ create index if not exists game_stats_kills_idx on public.game_stats (kills desc
 create index if not exists game_stats_earned_idx on public.game_stats (cash_earned desc);
 create index if not exists game_stats_race_idx on public.game_stats (best_race_seconds) where best_race_seconds is not null;
 create index if not exists chat_messages_sent_idx on public.chat_messages (sent_at desc);
+create index if not exists friendships_addressee_idx on public.friendships (addressee_id, status);
 
 -- Live leaderboard: stream game_stats changes to clients
 do $$
@@ -179,6 +210,19 @@ begin
     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'game_stats'
   ) then
     alter publication supabase_realtime add table public.game_stats;
+  end if;
+end
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'friendships'
+  ) then
+    alter publication supabase_realtime add table public.friendships;
   end if;
 end
 $$;
