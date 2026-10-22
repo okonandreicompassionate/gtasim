@@ -71,6 +71,13 @@ alter table public.chat_messages enable row level security;
 alter table public.races enable row level security;
 alter table public.race_participants enable row level security;
 
+-- Game progression is account-only: guests use no database save path.
+revoke all on public.profiles, public.player_saves, public.owned_vehicles,
+  public.discoveries, public.game_stats from anon;
+grant select, insert, update on public.profiles to authenticated;
+grant select, insert, update, delete on public.player_saves,
+  public.owned_vehicles, public.discoveries, public.game_stats to authenticated;
+
 drop policy if exists "Profiles are visible to signed-in players" on public.profiles;
 create policy "Profiles are visible to signed-in players"
   on public.profiles for select to authenticated using (true);
