@@ -458,7 +458,7 @@ const SPECS={
  sedan:{name:'Sedan',w:1.8,len:4.5,wr:.34,ws:1.4,top:44,acc:5.6,lower:[[-.5,.42],[.5,.42],[.5,.64],[.47,.86],[.3,.94],[-.3,.97],[-.47,.96],[-.5,.8]],gh:[[.27,.95],[.11,1.46],[-.2,1.46],[-.37,.98]]},
  taxi:{name:'Taxi',w:1.8,len:4.5,wr:.34,ws:1.4,top:44,acc:5.6,color:0xf0b800,taxi:true,lower:[[-.5,.42],[.5,.42],[.5,.64],[.47,.86],[.3,.94],[-.3,.97],[-.47,.96],[-.5,.8]],gh:[[.27,.95],[.11,1.46],[-.2,1.46],[-.37,.98]]},
  police:{name:'Police Cruiser',w:1.8,len:4.5,wr:.34,ws:1.4,top:58,acc:8.2,mu:1.1,m:1750,color:0x172b4c,badge:0x58aaff,police:true,lower:[[-.5,.42],[.5,.42],[.5,.64],[.47,.86],[.3,.94],[-.3,.94],[-.47,.96],[-.5,.8]],gh:[[.27,.95],[.11,1.46],[-.2,1.46],[-.37,.98]]},
- urus:{name:'Lamborghini Urus',w:2.24,len:5.15,wr:.55,ws:1.62,wd:.47,top:68,acc:15.5,mu:1.48,m:2450,color:0x4b5a39,roughness:.72,metalness:.15,urus:true,awd:true,lower:[[-.5,.48],[.5,.48],[.5,.72],[.48,1.05],[.4,1.25],[.22,1.38],[-.28,1.36],[-.45,1.2],[-.5,.92]],gh:[[.3,1.27],[.16,1.91],[-.31,1.89],[-.44,1.25]]},
+ urus:{name:'Lamborghini Urus',w:2.24,len:5.15,wr:.55,ws:1.62,wd:.47,top:68,acc:8.2,mu:1,m:2450,color:0x4b5a39,roughness:.72,metalness:.15,urus:true,awd:true,lower:[[-.5,.48],[.5,.48],[.5,.72],[.48,1.05],[.4,1.25],[.22,1.38],[-.28,1.36],[-.45,1.2],[-.5,.92]],gh:[[.3,1.27],[.16,1.91],[-.31,1.89],[-.44,1.25]]},
  cybertruck:{name:'Tesla Cybertruck',w:2.2,len:5.7,wr:.5,ws:1.85,wd:.38,top:58,acc:13,mu:1.45,m:3100,color:0x9a9ea3,roughness:.38,metalness:.95,cybertruck:true,lower:[[-.5,.42],[.5,.42],[.5,.72],[.08,1.9],[-.5,1.45]],gh:[[.08,1.9],[-.2,1.8],[-.5,1.45]]},
  sportbike:{name:'Lagos Sportbike',w:.82,len:2.35,wr:.38,ws:.94,top:58,acc:12,mu:1.15,m:245,color:0xc51d2e,motorcycle:true},
  dirtbike:{name:'Lagos Trail Bike',w:.88,len:2.4,wr:.42,ws:.96,top:42,acc:9,mu:1.3,m:175,color:0xe1a625,motorcycle:true},
@@ -691,26 +691,27 @@ function buildVehicleModel(type){
 // ---------- vehicles
 const vehicles=[];let shake=0,cash=500000000;const GRIP=1.4;
 function addVeh(type,x,z,h,kind){const sp=SPECS[type],v=buildVehicleModel(type);v.type=type;v.kind=kind;
-  v.s={h,vx:0,vz:0,vy:0,r:0,steer:0,pitch:0,pv:0,roll:0,rv:0,spin:0,gear:1,rpm:900,u:0,aL:0,nitro:100,sport:false,rotorRpm:0};v.g.position.set(x,0,z);v.g.rotation.y=h;v.ai=null;v.age=0;v.hp=100;v.spawn={x,z,h};if(sp.hover){v.s.hover=true;v.s.hy=.55;v.g.position.y=.55;}vehicles.push(v);return v;}
+  v.s={h,vx:0,vz:0,vy:0,r:0,steer:0,pitch:0,pv:0,roll:0,rv:0,spin:0,gear:1,rpm:900,u:0,aL:0,nitro:100,sport:false,rotorRpm:0,yawRate:0};v.g.position.set(x,0,z);v.g.rotation.y=h;v.ai=null;v.age=0;v.hp=100;v.spawn={x,z,h};if(sp.hover){v.s.hover=true;v.s.hy=.55;v.g.position.y=.55;}vehicles.push(v);return v;}
 function smooth(s,k,t,dt,r){let c=s[k]||0;c+=(t-c)*Math.min(1,dt*r);if(t===0&&c<.02)c=0;if(t===1&&c>.98)c=1;s[k]=c;return c;}
 function helicopterStep(V,inp,dt){
   const s=V.s,p=V.g.position,player=V===pl.veh;
   if(!player){if(V.rotor)V.rotor.rotation.y+=dt*2.2;if(V.tailRotor)V.tailRotor.rotation.x+=dt*24;return;}
   const forward=clamp(inp.thr-inp.brk,-1,1),yaw=clamp(inp.x,-1,1),slide=(keys.KeyE?1:0)-(keys.KeyQ?1:0),
     collective=(keys.Space?1:0)-(keys.ShiftLeft||keys.ShiftRight?1:0);
-  s.rotorRpm+=(1-s.rotorRpm)*Math.min(1,dt*.72);
-  const power=clamp((s.rotorRpm-.2)/.8,0,1),speedLimit=V.sp.top,sideLimit=V.sp.ws*1.8,
+  s.rotorRpm+=(1-s.rotorRpm)*Math.min(1,dt*.9);
+  const power=clamp(s.rotorRpm,0,1),speedLimit=V.sp.top,sideLimit=V.sp.ws*1.8,
     fx=Math.sin(s.h),fz=Math.cos(s.h),rx=Math.cos(s.h),rz=-Math.sin(s.h);
   let u=s.vx*fx+s.vz*fz,v=s.vx*rx+s.vz*rz;
-  const flightAccel=V.sp.heliModel==='fighter'?18:V.sp.heliModel==='stealth'?13:9,
-    dragU=.07+.003*Math.abs(u),dragV=.12+.008*Math.abs(v);
+  const flightAccel=V.sp.heliModel==='fighter'?11:V.sp.heliModel==='stealth'?8.5:6.5,
+    dragU=.12+.007*Math.abs(u),dragV=.24+.014*Math.abs(v);
   u=clamp(u+(forward*flightAccel*power-u*dragU)*dt,-speedLimit*.35,speedLimit);
-  v=clamp(v+(slide*flightAccel*.72*power-v*dragV)*dt,-sideLimit,sideLimit);
-  const yawRate=V.sp.heliModel==='fighter'?1.4:V.sp.heliModel==='stealth'?1.15:.95;
-  s.h=wrapA(s.h+yaw*yawRate*(1-.22*Math.min(Math.abs(u)/speedLimit,1))*dt);
+  v=clamp(v+(slide*flightAccel*.6*power-v*dragV)*dt,-sideLimit,sideLimit);
+  const yawRate=V.sp.heliModel==='fighter'?1.05:V.sp.heliModel==='stealth'?.82:.68;
+  s.yawRate+=(yaw*yawRate-s.yawRate)*Math.min(1,dt*2.8);
+  s.h=wrapA(s.h+s.yawRate*(1-.28*Math.min(Math.abs(u)/speedLimit,1))*dt);
   s.vx=Math.sin(s.h)*u+Math.cos(s.h)*v;s.vz=Math.cos(s.h)*u-Math.sin(s.h)*v;
-  const climbRate=V.sp.heliModel==='fighter'?8:V.sp.heliModel==='stealth'?7:5.5,targetVy=collective*climbRate*power;
-  s.vy+=(targetVy-s.vy)*Math.min(1,dt*(collective?1.8:2.6));
+  const verticalAccel=9.81*power*(1+collective*.5)-9.81-s.vy*(.45+.035*Math.abs(s.vy));
+  s.vy=clamp(s.vy+verticalAccel*dt,-12,10);
   p.x+=s.vx*dt;p.z+=s.vz*dt;p.y=clamp(p.y+s.vy*dt,0,180);
   if(p.y===180&&s.vy>0)s.vy=0;
   const edge=keepInBounds(p,4);if(edge.x)s.vx=0;if(edge.z)s.vz=0;
@@ -726,10 +727,12 @@ function helicopterStep(V,inp,dt){
   if(p.y<2.5){const groundHit=pushOut(p,radius);if(groundHit){s.vx*=.35;s.vz*=.35;}}
   if(p.y<=0){
     if(s.vy<-9){shake=Math.max(shake,.18);crashHit(V,-s.vy);}
-    p.y=0;s.vy=0;s.vx*=Math.exp(-1.5*dt);s.vz*=Math.exp(-1.5*dt);
+    p.y=0;s.vy=0;s.vx*=Math.exp(-2.2*dt);s.vz*=Math.exp(-2.2*dt);
   }
   const speed=Math.hypot(s.vx,s.vz);s.u=speed;s.dist=(s.dist||0)+speed*dt;s.rpm=900+power*5700;
-  s.thr=forward;s.skid=0;s.pitch=clamp(-u/speedLimit*.3,-.32,.32);s.roll=clamp(-v/sideLimit*.28-yaw*Math.abs(u)/speedLimit*.16,-.34,.34);
+  s.thr=forward;s.skid=0;
+  s.pitch=clamp(-forward*.16-u/speedLimit*.24,-.3,.3);
+  s.roll=clamp(-slide*.14-v/sideLimit*.22-s.yawRate*Math.abs(u)/speedLimit*.12,-.32,.32);
   V.g.rotation.y=s.h;V.ch.rotation.x=s.pitch;V.ch.rotation.z=s.roll;
   if(V.rotor)V.rotor.rotation.y+=dt*(4+power*30);if(V.tailRotor)V.tailRotor.rotation.x+=dt*(8+power*38);
 }
@@ -755,15 +758,15 @@ function vehStep(V,inp,dt){if(V.sp.aircraft){helicopterStep(V,inp,dt);return;}
   else for(let n=0;n<N;n++){
     const mu=grip,sp2=Math.abs(u);
     let drive=0;if(inp.thr>0)drive=u>-.5?acc*1.2*(1-clamp(u/top,0,1)**2)*inp.thr*clamp(.5+sp2/5,.5,1):14*inp.thr;
-    drive=Math.min(drive,mu*g*1.1);
-    let brake=0;if(inp.brk>0){if(u>.05)brake=-Math.min((46+Math.min(u,60)*.5)*Math.sqrt(mu)*inp.brk,u/h*.95);else if(s.rev)drive-=sp.acc*.5*inp.brk*clamp(1+u/12,0,1);}
+    drive=Math.min(drive,V.type==='urus'?(launch?10.5:sport?9.5:8.6):mu*g*1.1);
+    let brake=0;if(inp.brk>0){if(u>.05){const brakeForce=V.type==='urus'?9+Math.min(u,60)*.05:46+Math.min(u,60)*.5;brake=-Math.min(brakeForce*Math.sqrt(mu)*inp.brk,u/h*.95);}else if(s.rev)drive-=sp.acc*.5*inp.brk*clamp(1+u/12,0,1);}
     if(inp.hb)brake-=Math.sign(u)*Math.min(18,sp2/h*.5);
     aL=drive+brake-Math.sign(u)*(.5+(inp.thr===0?1.4:0));
     const ang=s.steer*clamp(.78-.009*sp2,.34,.78),rt0=u*Math.tan(u<0?-ang:ang)/L,lim=(inp.hb?2.5:1.85)*mu*g/Math.max(sp2,2.5);
     const rt=clamp(rt0*(inp.hb&&sp2>6?1.8:1),-lim,lim);
     r+=(rt-r)*Math.min(1,h*(inp.hb?9:18));
     v+=u*r*h;u+=(aL-v*r)*h;
-    v*=Math.exp(-(inp.hb?1.1:8.5)*h);
+    v*=Math.exp(-(inp.hb?1.1:V.type==='urus'?6.5:8.5)*h);
     if(inp.thr===0&&Math.abs(u)<.35&&(inp.brk===0||!s.rev)){u*=Math.exp(-14*h);v*=Math.exp(-14*h);if(Math.abs(u)<.02)u=0;}
   }  s.aL=aL;const aLat=u*r;s.dist=(s.dist||0)+Math.abs(u)*dt;s.skid=spd>2?clamp((Math.abs(v)-1.8)/3,0,1):0;if(inp.brk>.9&&u>6)s.skid=Math.max(s.skid,.5);if(inp.hb&&spd>3)s.skid=1;s.thr=inp.thr;
   s.aLf=(s.aLf||0)+(aL-(s.aLf||0))*Math.min(1,dt*7);s.pv+=(-80*(s.pitch-(-s.aLf*.006))-12*s.pv)*dt;s.pitch+=s.pv*dt;s.rv+=(-70*(s.roll-aLat*.004)-9*s.rv)*dt;s.roll+=s.rv*dt;
