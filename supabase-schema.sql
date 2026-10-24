@@ -220,6 +220,7 @@ declare
   v_saved_day text;
   v_saved_claim text;
   v_saved_streak text;
+  v_has_claim boolean;
 begin
   if v_user is null then
     raise exception 'Authentication required';
@@ -235,32 +236,50 @@ begin
     where ps.user_id = v_user
     for update;
 
+  select ps.weapons->'dy'->>'d', ps.weapons->'dy'->>'cl', ps.weapons->'dy'->>'st'
+    into v_saved_day, v_saved_claim, v_saved_streak
+    from public.player_saves as ps
+    where ps.user_id = v_user;
+
   select dlc.last_claim_date, dlc.streak_day
     into v_last, v_streak
     from public.daily_login_claims as dlc
     where dlc.user_id = v_user;
+  v_has_claim := found;
 
-  if found and v_last = v_today then
+  if v_has_claim and v_last = v_today then
+    if v_saved_day = v_today::text and v_saved_claim in ('true', '1')
+       and v_saved_streak ~ '^[0-9]{1,7}$' then
+      v_streak := greatest(v_streak, v_saved_streak::integer);
+      update public.daily_login_claims as dlc
+        set streak_day = v_streak, updated_at = now()
+        where dlc.user_id = v_user;
+    end if;
     return query select false, 0::bigint, v_streak, v_today;
     return;
   end if;
 
-  if not found then
-    select ps.weapons->'dy'->>'d', ps.weapons->'dy'->>'cl', ps.weapons->'dy'->>'st'
-      into v_saved_day, v_saved_claim, v_saved_streak
-      from public.player_saves as ps
-      where ps.user_id = v_user;
+  if v_saved_day = v_today::text and v_saved_claim in ('true', '1') then
+    v_streak := case when v_saved_streak ~ '^[0-9]{1,7}$'
+      then greatest(coalesce(v_streak, 1), v_saved_streak::integer) else coalesce(v_streak, 1) end;
+    insert into public.daily_login_claims as existing_claim(user_id, last_claim_date, streak_day, updated_at)
+      values (v_user, v_today, v_streak, now())
+      on conflict (user_id) do update
+        set last_claim_date = excluded.last_claim_date,
+            streak_day = greatest(existing_claim.streak_day, excluded.streak_day),
+            updated_at = excluded.updated_at;
+    return query select false, 0::bigint, v_streak, v_today;
+    return;
+  end if;
+
+  if not v_has_claim then
     v_streak := case when v_saved_streak ~ '^[0-9]{1,7}$' then v_saved_streak::integer else 1 end;
-    if v_saved_day = v_today::text and v_saved_claim in ('true', '1') then
-      v_streak := greatest(v_streak, 1);
-      insert into public.daily_login_claims(user_id, last_claim_date, streak_day)
-        values (v_user, v_today, v_streak);
-      return query select false, 0::bigint, v_streak, v_today;
-      return;
-    end if;
-    v_streak := case when v_saved_day = (v_today - 1)::text and v_saved_claim in ('true', '1')
+    v_streak := case when v_saved_day = (v_today - 1)::text
       then greatest(v_streak, 1) + 1 else 1 end;
   else
+    if v_last = v_today - 1 and v_saved_day = v_last::text and v_saved_streak ~ '^[0-9]{1,7}$' then
+      v_streak := greatest(v_streak, v_saved_streak::integer);
+    end if;
     v_streak := case when v_last = v_today - 1 then v_streak + 1 else 1 end;
   end if;
 

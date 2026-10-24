@@ -108,7 +108,7 @@ body.touch #pauseBtn{display:flex}
 <div class="b gl w" id="bj" style="left:96px;bottom:calc(env(safe-area-inset-bottom,0px) + 28px)">JUMP</div>
 <div class="b gl" id="ba" style="right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 28px)">ENTER</div>
 <div class="b gl d" id="bg" style="right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 110px);height:76px;min-width:76px;border-radius:24px">GAS</div>
-<div class="b gl d" id="bb" style="right:104px;bottom:calc(env(safe-area-inset-bottom,0px) + 110px);height:76px;min-width:76px;border-radius:24px">BRAKE</div>
+<div class="b gl d" id="bb" aria-label="Brake and reverse" title="Brake while moving forward; reverse once stopped" style="right:104px;bottom:calc(env(safe-area-inset-bottom,0px) + 110px);height:76px;min-width:76px;border-radius:24px;font-size:10px">BRAKE / REV</div>
 <div class="b gl d" id="bl" style="left:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 40px);height:76px;min-width:76px;border-radius:24px">◀</div>
 <div class="b gl d" id="br" style="left:104px;bottom:calc(env(safe-area-inset-bottom,0px) + 40px);height:76px;min-width:76px;border-radius:24px">▶</div>
 <div class="b gl d hvb" id="bhv" style="right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 196px)">HOVER</div>
@@ -191,6 +191,7 @@ const cellKey=(x,z)=>Math.floor(x/COLLIDER_CELL)+','+Math.floor(z/COLLIDER_CELL)
 function addPropCollider(x,z,r){const k=propKey(x,z);let a=propGrid.get(k);if(!a)propGrid.set(k,a=[]);a.push({x,z,r});}
 function addAirBlock(x,z,w,d,h){const b={x0:x-w/2,x1:x+w/2,z0:z-d/2,z1:z+d/2,h};
   for(let i=Math.floor(b.x0/AIR_CELL);i<=Math.floor(b.x1/AIR_CELL);i++)for(let j=Math.floor(b.z0/AIR_CELL);j<=Math.floor(b.z1/AIR_CELL);j++){const k=i+','+j;let a=airGrid.get(k);if(!a)airGrid.set(k,a=[]);a.push(b);}}
+function groundHeightAt(x,z){let height=0;for(const b of airGrid.get(Math.floor(x/AIR_CELL)+','+Math.floor(z/AIR_CELL))||[])if(x>=b.x0&&x<=b.x1&&z>=b.z0&&z<=b.z1)height=Math.max(height,b.h);return height;}
 function indexColliders(){colliderGrid.clear();for(const b of colliders){for(let x=Math.floor(b.x0/COLLIDER_CELL);x<=Math.floor(b.x1/COLLIDER_CELL);x++)for(let z=Math.floor(b.z0/COLLIDER_CELL);z<=Math.floor(b.z1/COLLIDER_CELL);z++){const k=x+','+z;let a=colliderGrid.get(k);if(!a)colliderGrid.set(k,a=[]);a.push(b);}}indexedColliderCount=colliders.length;}
 function keepInBounds(p,r=0,allowInterior=true){
   if(raceState&&allowInterior)return raceBounds(p,r);
@@ -731,17 +732,19 @@ function helicopterStep(V,inp,dt){
   const radius=V.sp.heliModel==='stealth'?4.2:3.6;
   for(let i=Math.floor((p.x-radius)/AIR_CELL);i<=Math.floor((p.x+radius)/AIR_CELL);i++)for(let j=Math.floor((p.z-radius)/AIR_CELL);j<=Math.floor((p.z+radius)/AIR_CELL);j++){
     for(const b of airGrid.get(i+','+j)||[]){
-      if(p.y> b.h+2.5||p.x<b.x0-radius||p.x>b.x1+radius||p.z<b.z0-radius||p.z>b.z1+radius)continue;
+      if(p.y>=b.h-.2||p.x<b.x0-radius||p.x>b.x1+radius||p.z<b.z0-radius||p.z>b.z1+radius)continue;
       const dx=Math.min(b.x1+radius-p.x,p.x-(b.x0-radius)),dz=Math.min(b.z1+radius-p.z,p.z-(b.z0-radius));
       if(dx<dz)p.x+=p.x<(b.x0+b.x1)/2?-(dx+.05):dx+.05;else p.z+=p.z<(b.z0+b.z1)/2?-(dz+.05):dz+.05;
       s.vx*=.3;s.vz*=.3;shake=Math.max(shake,.12);
     }
   }
   if(p.y<2.5){const groundHit=pushOut(p,radius);if(groundHit){s.vx*=.35;s.vz*=.35;}}
-  if(p.y<=0){
+  const groundY=groundHeightAt(p.x,p.z);
+  if(p.y<=groundY){
     if(s.vy<-9){shake=Math.max(shake,.18);crashHit(V,-s.vy);}
-    p.y=0;s.vy=0;s.vx*=Math.exp(-2.2*dt);s.vz*=Math.exp(-2.2*dt);
+    p.y=groundY;s.vy=0;s.vx*=Math.exp(-2.2*dt);s.vz*=Math.exp(-2.2*dt);
   }
+  s.agl=Math.max(0,p.y-groundY);
   const speed=Math.hypot(s.vx,s.vz);s.u=speed;s.dist=(s.dist||0)+speed*dt;s.rpm=900+power*5700;
   s.thr=forward;s.skid=0;
   s.pitch=clamp(-forward*.16-u/speedLimit*.24,-.3,.3);
@@ -760,8 +763,7 @@ function vehStep(V,inp,dt){if(V.sp.aircraft){helicopterStep(V,inp,dt);return;}
   const spd=Math.abs(u);
   const st=-inp.x,rate=(Math.abs(st)<Math.abs(s.steer)||st*s.steer<0?8:4.6-1.4*clamp(spd/40,0,1))*dt;s.steer+=clamp(st-s.steer,-rate,rate);
   const muS=GRIP*grip*(1+(sp.df||0)*u*u),ang=s.steer*Math.min(.52,1.05*muS*g*L/(u*u+3)+.03/(1+(u/20)**2));
-  if(inp.brk>0&&Math.abs(u)<.3)s.brkT=(s.brkT||0)+dt;else s.brkT=0;
-  if(s.brkT>.4)s.rev=true;if(inp.brk===0||inp.thr>0||u>.5)s.rev=false;
+  if(inp.brk>.05&&u<.35)s.rev=true;if(inp.brk===0||inp.thr>0||u>.5)s.rev=false;
   const N=3,h=dt/N;let aL=0;
   if(s.hover&&sp.hover){const thr=inp.thr,brk=inp.brk;let a=0;if(thr>0)a=sp.hacc*thr*clamp(1.2-Math.max(u,0)/sp.htop,.05,1.2);
     if(brk>0)a-=(u>.5?sp.hbrk:sp.hacc*.5)*brk*(u>.5?1:clamp(1+u/25,0,1));a-=Math.sign(u)*(.0006*u*u+.4);aL=a;
@@ -952,7 +954,7 @@ function hurtPlayer(dmg,fx,fz,nocd){if(pl.mode==='drive'||pl.dead||pl.arrested||
 
 // ---------- speedometer
 const gcv=$('gauge'),gx=gcv.getContext('2d'),RAD=Math.PI/180;
-function drawGauge(V){const c=gx,s=V.s,kmh=Math.abs(s.u)*3.6,maxK=Math.ceil(V.sp.top*(V.type==='urus'?1.22:1)*3.6*1.05/20)*20,step=maxK>250?40:20,ang=v=>(-225+270*clamp(v/maxK,0,1))*RAD;
+function drawGauge(V){if(V.sp.aircraft){drawHelicopterGauge(V);return;}const c=gx,s=V.s,kmh=Math.abs(s.u)*3.6,maxK=Math.ceil(V.sp.top*(V.type==='urus'?1.22:1)*3.6*1.05/20)*20,step=maxK>250?40:20,ang=v=>(-225+270*clamp(v/maxK,0,1))*RAD;
   c.clearRect(0,0,220,220);c.save();c.translate(110,110);
   c.beginPath();c.arc(0,0,106,0,7);c.fillStyle='rgba(10,14,22,.78)';c.fill();c.lineWidth=2;c.strokeStyle='rgba(255,255,255,.4)';c.stroke();
   const rf=clamp((s.rpm-900)/5700,0,1);c.lineWidth=7;c.lineCap='butt';
@@ -965,6 +967,19 @@ function drawGauge(V){const c=gx,s=V.s,kmh=Math.abs(s.u)*3.6,maxK=Math.ceil(V.sp
   c.beginPath();c.arc(0,0,6,0,7);c.fillStyle='#ff4d4d';c.fill();
   c.fillStyle='#fff';c.font='bold 34px system-ui';c.fillText(Math.round(kmh),0,34);c.font='11px system-ui';c.fillStyle='#aab';c.fillText('km/h',0,54);
   c.font='bold 16px system-ui';c.fillStyle='#ffd24a';c.fillText(s.gear<0?'R':s.gear===0?'N':s.gear,0,-34);c.restore();}
+function drawHelicopterGauge(V){const c=gx,s=V.s,p=V.g.position,agl=Math.max(0,p.y-groundHeightAt(p.x,p.z)),knots=Math.hypot(s.vx,s.vz)*1.94384,heading=((Math.round((s.h*180/Math.PI+360)%360)%360)+360)%360;
+  s.agl=agl;c.clearRect(0,0,220,220);c.save();c.translate(110,110);
+  c.beginPath();c.arc(0,0,106,0,Math.PI*2);c.fillStyle='rgba(8,13,22,.92)';c.fill();c.lineWidth=2;c.strokeStyle='rgba(120,190,255,.6)';c.stroke();
+  c.fillStyle='#8edcff';c.font='bold 12px system-ui';c.textAlign='center';c.textBaseline='middle';c.fillText(V.sp.fighter?'FLIGHT · ATTACK':'FLIGHT · ROTORCRAFT',0,-86);
+  c.save();c.beginPath();c.arc(0,-14,48,0,Math.PI*2);c.clip();c.translate(0,-14);c.rotate(-s.roll);
+  const pitch=clamp(s.pitch*105,-30,30);c.fillStyle='#286d9a';c.fillRect(-70,-70+pitch,140,70);c.fillStyle='#76563a';c.fillRect(-70,pitch,140,70);
+  c.strokeStyle='rgba(255,255,255,.9)';c.lineWidth=1.4;for(let i=-2;i<=2;i++){if(!i)continue;const y=i*12+pitch;c.beginPath();c.moveTo(-18,y);c.lineTo(-7,y);c.moveTo(7,y);c.lineTo(18,y);c.stroke();}
+  c.restore();c.strokeStyle='#ffd24a';c.lineWidth=2;c.beginPath();c.moveTo(-27,-14);c.lineTo(-10,-14);c.moveTo(10,-14);c.lineTo(27,-14);c.moveTo(0,-19);c.lineTo(0,-10);c.stroke();
+  c.fillStyle='#e8ecf2';c.font='bold 10px system-ui';c.textAlign='left';c.fillText('IAS',-84,53);c.fillText('AGL',10,53);c.font='bold 18px system-ui';c.fillStyle='#fff';c.fillText(Math.round(knots),-84,72);c.fillText(Math.round(agl),10,72);
+  c.font='9px system-ui';c.fillStyle='#aab8c8';c.fillText('KT',-48,72);c.fillText('M',48,72);
+  c.textAlign='center';c.font='bold 11px system-ui';c.fillStyle='#ffd24a';c.fillText(String(heading).padStart(3,'0')+'°',0,-61);
+  c.textAlign='left';c.font='bold 10px system-ui';c.fillStyle='#e8ecf2';c.fillText('V/S '+(s.vy>=0?'+':'')+s.vy.toFixed(1)+' m/s',-81,91);
+  c.textAlign='right';c.fillStyle='#9be7bd';c.fillText('ROTOR '+Math.round((s.rotorRpm||0)*100)+'%',81,91);c.restore();}
 // ---------- skid marks
 const SK=360;const skGeo=new T.PlaneGeometry(.28,1.0);skGeo.rotateX(-Math.PI/2);
 const skid=new T.InstancedMesh(skGeo,new T.MeshBasicMaterial({color:0x050505,transparent:true,opacity:.55,depthWrite:false}),SK);
@@ -1163,7 +1178,7 @@ function loop(now){rafId=0;if(gamePaused||document.hidden)return;const frameMs=M
   hintEl.style.display=ht?'block':'none';if(ht)hintEl.textContent=ht;
   if(toastT>0){toastT-=dt;if(toastT<=0)toastEl.style.display='none';}
   hpEl.style.width=pl.hp+'%';$('hpn').textContent='♥ '+Math.ceil(pl.hp);const wantedText=wantedLevel?'🚨 WANTED '+'★'.repeat(wantedLevel):'';if($('wline').textContent!==wantedText){$('wline').textContent=wantedText;$('wline').style.color=wantedLevel?'#ffcc4d':'';}
-  spdEl.textContent=pl.mode==='drive'?pl.veh.sp.name||'Car':'On foot';if(pl.veh&&pl.veh.type==='urus'){const charge=Math.round(pl.veh.s.nitro);$('nitroPct').textContent=charge+'%';$('nitroFill').style.width=charge+'%';$('bnitro').style.opacity=charge?'1':'.45';}gaugeT+=dt;if(pl.mode==='drive'&&gaugeT>=.08){gaugeT=0;driveSpeedEl.textContent=Math.round(Math.abs(pl.veh.s.u)*3.6)+' km/h';drawGauge(pl.veh);}
+  spdEl.textContent=pl.mode==='drive'?pl.veh.sp.name||'Car':'On foot';if(pl.veh&&pl.veh.type==='urus'){const charge=Math.round(pl.veh.s.nitro);$('nitroPct').textContent=charge+'%';$('nitroFill').style.width=charge+'%';$('bnitro').style.opacity=charge?'1':'.45';}  gaugeT+=dt;if(pl.mode==='drive'&&gaugeT>=.08){gaugeT=0;driveSpeedEl.textContent=pl.veh.sp.aircraft?Math.round(Math.hypot(pl.veh.s.vx,pl.veh.s.vz)*1.94384)+' kt':Math.round(Math.abs(pl.veh.s.u)*3.6)+' km/h';drawGauge(pl.veh);}
   perfStep(frameMs);renderer.render(scene,cam);scheduleLoop();}
 const GQ=[{n:'Detail',pr:mobile?1.5:2,sh:mobile?1024:2048,ev:mobile?2:1},{n:'Balanced',pr:mobile?1.25:1.75,sh:mobile?768:1024,ev:mobile?3:2},{n:'Smooth',pr:mobile?1.05:1.5,sh:mobile?512:1024,ev:mobile?4:3}];
 let gq=localStorage.ah_gq===undefined?1:+localStorage.ah_gq;if(!(gq>=0&&gq<3))gq=1;let perfN=0,perfA=0,perfF=0,perfBad=0,perfGood=0,adaptiveScale=1;
@@ -2448,7 +2463,8 @@ function ensure(){const t=DK();let d=sv.dy;
   if(!d||typeof d!=='object')d=sv.dy={d:'',last:'',st:0,cl:0,rr:0,all:0,m:[]};
   if(d.d!==t){d.d=t;d.cl=0;d.rr=0;d.all=0;const r=mkR(HASH(t)),ks=kindsOpen();d.m=[];
     while(d.m.length<3&&ks.length){const k=ks.splice((r()*ks.length)|0,1)[0];d.m.push({k,g:KINDS[k].g(r),p:0,c:0});}dirty=1;}
-  const cached=readLoginClaim();if(cached&&cached.day===t){d.cl=1;d.last=t;d.st=Math.max(d.st|0,cached.streak|0);}
+  const cached=readLoginClaim();if(cached&&typeof cached.day==='string'&&Number.isFinite(+cached.streak)&&+cached.streak>0){const gap=dayN(t)-dayN(cached.day);
+    if(gap>=0&&gap<=1&&(dayN(cached.day)>dayN(d.last||'1970-01-01')||cached.day===d.last&&+cached.streak>d.st)){d.last=cached.day;d.st=+cached.streak;if(gap===0)d.cl=1;}}
   return d;}
 let dirty=0,saveT=0;
 const streakNow=()=>{const d=sv.dy;if(!d||!d.last)return 0;const g=dayN(DK())-dayN(d.last);return g<=1?d.st:0;};
@@ -2482,7 +2498,7 @@ function render(){const d=ensure(),st=streakNow(),canLogin=!d.cl,nextSt=canLogin
   let h='<div style="font-size:15px;margin-bottom:6px"><b>\ud83d\udcc5 DAILY</b> \u00b7 \ud83d\udd25 '+st+' day streak</div><div style="display:flex;gap:4px;margin:6px 0">';
   LOGIN.forEach((v,i)=>{const cur=i===idx,past=d.cl?i<=idx:i<idx;h+='<div style="flex:1;text-align:center;padding:5px 0;border-radius:8px;font-size:10px;border:1px solid '+(cur?'#ffd24a':'rgba(255,255,255,.25)')+';background:'+(past?'rgba(61,255,122,.25)':'rgba(255,255,255,.08)')+'">D'+(i+1)+'<br><b>'+fmtN(v)+'</b>'+(i===6?'<br>\ud83c\udf81':'')+'</div>';});
   h+='</div>';
-  h+=canLogin?'<button class="sbtn" data-a="login" style="background:#ffd24a;color:#111">CLAIM DAY '+(idx+1)+' \u00b7 '+fmtN(LOGIN[idx])+'</button>':'<div style="opacity:.75;margin:4px 0">\u2705 Today\'s login reward claimed. Come back tomorrow to keep your streak.</div>';
+  h+=canLogin?'<button class="sbtn" data-a="login" style="background:#ffd24a;color:#111">CLAIM STREAK DAY '+nextSt+' \u00b7 WEEKLY REWARD '+fmtN(LOGIN[idx])+'</button>':'<div style="opacity:.75;margin:4px 0">\u2705 Today\'s login reward claimed. Come back tomorrow to keep your streak.</div>';
   h+='<div style="margin-top:10px"><b>Today\'s missions</b> <span style="opacity:.7">(x'+mult().toFixed(2)+' streak bonus)</span></div>';
   d.m.forEach((m,i)=>{const K=KINDS[m.k],pc=Math.min(100,m.p/m.g*100),rdy=m.p>=m.g&&!m.c,shownP=m.k==='earn'?fmtN(m.p)+' / '+fmtN(m.g):m.k==='drive'?(m.p/1000).toFixed(1)+' / '+(m.g/1000)+' km':m.k==='social'?fmtT(m.p)+' / '+fmtT(m.g):Math.floor(m.p)+' / '+m.g;
     h+='<div style="margin:8px 0;padding:8px;border-radius:10px;background:rgba(255,255,255,.08)"><div>'+K.t(m.g)+'</div><div style="height:8px;border-radius:5px;background:rgba(255,255,255,.15);margin:5px 0;overflow:hidden"><div style="height:100%;width:'+pc+'%;background:'+(m.c?'#3dff7a':'#4dd0ff')+'"></div></div><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="opacity:.8">'+shownP+' \u00b7 '+fmtN(Math.round(K.rw(m.g)*mult()/1e5)*1e5)+'</span>'
@@ -2517,8 +2533,9 @@ window.syncDailyLoginStatus=async user=>{
   const{data,error}=await db.from('daily_login_claims').select('last_claim_date,streak_day').eq('user_id',user.id).maybeSingle();
   if(error){console.error('Daily login status lookup failed:',error);toast('Daily login status unavailable. Update Supabase using supabase-schema.sql.');return;}
   if(!data)return;
-  const d=ensure();d.last=String(data.last_claim_date);d.st=+data.streak_day||0;
-  if(d.last===DK()){d.cl=1;rememberLoginClaim(d.last,d.st);}
+  const d=ensure(),claimDay=String(data.last_claim_date),claimStreak=+data.streak_day||0;
+  if(!d.last||dayN(claimDay)>dayN(d.last)||claimDay===d.last&&claimStreak>d.st){d.last=claimDay;d.st=claimStreak;}
+  if(claimDay===DK()){d.cl=1;rememberLoginClaim(d.last,d.st);}
   if(dp.style.display==='block')render();
 };
 dc.addEventListener('pointerdown',e=>{const b=e.target.closest&&e.target.closest('[data-a]');if(!b)return;e.preventDefault();const d=ensure(),a=b.dataset.a,i=+b.dataset.i;
