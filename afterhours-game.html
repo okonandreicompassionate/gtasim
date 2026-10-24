@@ -756,7 +756,7 @@ function vehStep(V,inp,dt){if(V.sp.aircraft){helicopterStep(V,inp,dt);return;}
   if(s.hover&&sp.hover){const thr=inp.thr,brk=inp.brk;let a=0;if(thr>0)a=sp.hacc*thr*clamp(1.2-Math.max(u,0)/sp.htop,.05,1.2);
     if(brk>0)a-=(u>.5?sp.hbrk:sp.hacc*.5)*brk*(u>.5?1:clamp(1+u/25,0,1));a-=Math.sign(u)*(.0006*u*u+.4);aL=a;
     const un=u+a*dt;u=(Math.abs(un)<.15&&thr===0&&brk===0)?0:un;
-    const sg=u<-1?-1:1,rmax=2.2/(1+(Math.abs(u)/14)**1.5)+.12,tr=s.steer*rmax*sg*(.25+.75*clamp(Math.abs(u)/8,0,1));
+    const rmax=2.2/(1+(Math.abs(u)/14)**1.5)+.12,tr=-s.steer*rmax*(u<-1?-1:1)*(.25+.75*clamp(Math.abs(u)/8,0,1));
     r+=(tr-r)*Math.min(1,dt*5);v*=Math.exp(-(inp.hb?.5:2.8)*dt);}
   else for(let n=0;n<N;n++){
     const mu=grip,sp2=Math.abs(u);
@@ -765,7 +765,7 @@ function vehStep(V,inp,dt){if(V.sp.aircraft){helicopterStep(V,inp,dt);return;}
     let brake=0;if(inp.brk>0){if(u>.05){const brakeForce=V.type==='urus'?9+Math.min(u,60)*.05:46+Math.min(u,60)*.5;brake=-Math.min(brakeForce*Math.sqrt(mu)*inp.brk,u/h*.95);}else if(s.rev)drive-=sp.acc*.5*inp.brk*clamp(1+u/12,0,1);}
     if(inp.hb)brake-=Math.sign(u)*Math.min(18,sp2/h*.5);
     aL=drive+brake-Math.sign(u)*(.5+(inp.thr===0?1.4:0));
-    const ang=s.steer*clamp(.78-.009*sp2,.34,.78),rt0=u*Math.tan(u<0?-ang:ang)/L,lim=(inp.hb?2.5:1.85)*mu*g/Math.max(sp2,2.5);
+    const ang=s.steer*clamp(.78-.009*sp2,.34,.78),rt0=-u*Math.tan(ang)/L,lim=(inp.hb?2.5:1.85)*mu*g/Math.max(sp2,2.5);
     const rt=clamp(rt0*(inp.hb&&sp2>6?1.8:1),-lim,lim);
     r+=(rt-r)*Math.min(1,h*(inp.hb?9:18));
     v+=u*r*h;u+=(aL-v*r)*h;
@@ -1194,7 +1194,7 @@ function gx2(dt){const p=ppos();board.visible=!mis;board.userData.m.opacity=.3+M
         else toast(mis.race?'Checkpoint '+mis.i+'/'+mis.pts.length:'Package picked up');}
       else if(mis.t<=0)endJob('Job failed: out of time');
       if(mis){cam.getWorldDirection(dv);const rel=wrapA(Math.atan2(dx,dz)-Math.atan2(dv.x,dv.z));
-        txt='<b>'+mis.n+'</b> · '+(mis.race?'CP '+(mis.i+1)+'/'+mis.pts.length:mis.i?'DELIVER':'PICK UP')+'<br><span style="display:inline-block;transform:rotate('+(-rel)+'rad)">▲</span> '+Math.round(d)+' m · '+Math.max(0,mis.t|0)+' s · '+fmtN(mis.pay);}}}
+        txt='<b>'+mis.n+'</b> · '+(mis.race?'CP '+(mis.i+1)+'/'+mis.pts.length:mis.i?'DELIVER':'PICK UP')+'<br><span aria-label="Direction to checkpoint" title="Direction to checkpoint" style="display:inline-block;transform:rotate('+(-rel)+'rad)">↑</span> '+Math.round(d)+' m · '+Math.max(0,mis.t|0)+' s · '+fmtN(mis.pay);}}}
   if(!mis)txt='Jobs done '+done+' · earned '+fmtN(earned)+'<br><span style="color:#3ddc84">Green marker = new job</span>';
   mp(dt);mp2(dt);houseStep(dt);gx3(dt);
   if(raceState)txt='<b>'+raceState.kind.toUpperCase()+' RACE</b> · LAP '+Math.min(Math.floor(raceState.checkpoint/LAP_CP.length)+1,LAPS)+'/'+LAPS+' · '+Math.ceil(raceState.countdown>0?raceState.countdown:raceState.elapsed)+' s';
@@ -1571,7 +1571,7 @@ function navStep(){if(!nav){navEl.style.display='none';navM.visible=false;return
   if(nav.home){if(IN(p)){nav=null;toast('You are home');return;}if(sv.house&&BLD[sv.unit]){const dd=doorOf(sv.unit);tx=dd.x;tz=dd.z;}else{tx=34;tz=32;}}
   const dx=tx-p.x,dz=tz-p.z,d=Math.hypot(dx,dz);if(!nav.home&&!nav.friendId&&d<14){toast('Arrived: '+nav.name);nav=null;return;}
   navM.visible=true;navM.position.set(tx,0,tz);cam.getWorldDirection(dv);const rel=wrapA(Math.atan2(dx,dz)-Math.atan2(dv.x,dv.z));
-  navEl.style.display='block';navEl.innerHTML='<span style="display:inline-block;transform:rotate('+(-rel)+'rad);color:'+(nav.friendId?'#ffd24a':'#00e5ff')+'">▲</span> '+nav.name+' · '+Math.round(d)+' m';}
+  navEl.style.display='block';navEl.setAttribute('aria-label','Direction to '+nav.name+', '+Math.round(d)+' meters');navEl.innerHTML='<span title="Direction to destination" style="display:inline-block;transform:rotate('+(-rel)+'rad);color:'+(nav.friendId?'#ffd24a':'#00e5ff')+'">↑</span> '+nav.name+' · '+Math.round(d)+' m';}
 sv.seen=sv.seen||[];
 function discover(){const p=ppos();for(const l of LM){if(sv.seen.includes(l.id)||Math.hypot(p.x-l.x,p.z-l.z)>36)continue;sv.seen.push(l.id);cash+=2e6;earned+=2e6;toast('Discovered: '+l.name+' +₦2M ('+sv.seen.length+'/'+LM.length+')');if(sv.seen.length===LM.length){cash+=25e6;toast('ALL LANDMARKS FOUND! +₦25M');}persist();}}
 const mpn=pnl('mpn');mpn.style.cssText+=';max-height:88vh;overflow:auto';
@@ -1766,8 +1766,9 @@ function drawMap(){const c=mcx,S=320,p=ppos(),range=240,scale=S/(range*2),X=x=>S
   for(const[id,r]of rem){if(r.dd||r.rd)continue;const x=X(r.x),y=Z(r.z);if(x<0||x>S||y<0||y>S)continue;const friend=isFriend(id);c.beginPath();c.arc(x,y,friend?7:5,0,7);c.fillStyle=friend?'#43f3c2':'#8ea1b8';c.fill();c.lineWidth=friend?2:1;c.strokeStyle=friend?'#d4fff3':'#e0e6ef';c.stroke();if(friend){c.font='bold 10px system-ui';c.fillStyle='#fff';c.fillText(String(r.nm||'Friend').slice(0,10),x,y-10);}}
   for(const o of policeUnits)if(o.responding){const x=X(o.g.position.x),y=Z(o.g.position.z);if(x>=0&&x<=S&&y>=0&&y<=S){c.fillStyle='#47aaff';c.beginPath();c.arc(x,y,5,0,7);c.fill();c.strokeStyle='#fff';c.lineWidth=1;c.stroke();}}
   if(nav){const x=X(nav.x),y=Z(nav.z);c.strokeStyle=nav.friendId?'#ffd24a':'#00e5ff';c.lineWidth=3;c.beginPath();c.arc(x,y,11,0,7);c.stroke();}
-  c.save();c.translate(S/2,S/2);c.rotate(Math.PI-h);c.fillStyle='#ff4d4d';c.strokeStyle='#fff';c.lineWidth=2;c.beginPath();c.moveTo(0,-11);c.lineTo(8,9);c.lineTo(0,5);c.lineTo(-8,9);c.closePath();c.fill();c.stroke();c.restore();
-  c.fillStyle='rgba(4,8,14,.75)';c.fillRect(6,S-24,86,17);c.font='bold 10px system-ui';c.textAlign='left';c.fillStyle='#fff';c.fillText('● ONLINE   ★ FRIEND',11,S-12);}
+  c.save();c.translate(S/2,S/2);c.rotate(Math.PI-h);c.fillStyle='#ff4d4d';c.strokeStyle='#fff';c.lineWidth=2;c.beginPath();c.moveTo(0,-12);c.lineTo(8,8);c.lineTo(0,4);c.lineTo(-8,8);c.closePath();c.fill();c.stroke();c.restore();
+  c.fillStyle='rgba(4,8,14,.82)';c.fillRect(6,6,38,20);c.font='bold 11px system-ui';c.textAlign='center';c.fillStyle='#ffd24a';c.fillText('N ↑',25,20);
+  c.fillStyle='rgba(4,8,14,.75)';c.fillRect(6,S-24,112,17);c.font='bold 10px system-ui';c.textAlign='left';c.fillStyle='#fff';c.fillText('↑ YOU   ● ONLINE   ★ FRIEND',11,S-12);}
 function renderList(){const L=$('mlist'),p=ppos();L.innerHTML='<div style="opacity:.7;margin-bottom:4px">Landmarks '+sv.seen.length+'/'+LM.length+' · first visit pays ₦2M · tap one for GPS</div>';
   LM.forEach(l=>{const d=document.createElement('div');d.style.cssText='padding:5px 8px;border-radius:8px;background:rgba(255,255,255,.08);margin-bottom:4px';d.textContent=(sv.seen.includes(l.id)?'✓ ':'○ ')+l.name+' · '+Math.round(Math.hypot(l.x-p.x,l.z-p.z))+' m';d.addEventListener('pointerdown',e=>{e.preventDefault();setNav(l.ax,l.az,l.name);mpn.style.display='none';});L.appendChild(d);});}
 async function loadLeaderboard(){
@@ -1799,8 +1800,9 @@ slider('🎯 Scope aim speed','aim',.3,2.5,.05,x=>x.toFixed(2)+'×');
   setInterval(()=>{if(stp.style.display!=='block')return;const ch=liveChannel;d.innerHTML='🌐 <b>Online status</b><br>Account: '+(cloudUser?'<span style="color:#6bff9a">signed in</span>':'<span style="color:#ff8a8a">NOT signed in (use 👤)</span>')+'<br>Realtime: '+(ch?(ch.state==='joined'?'<span style="color:#6bff9a">connected</span>':'<span style="color:#ffb347">'+ch.state+'</span>'):'<span style="color:#ff8a8a">not connected</span>')+'<br>Players seen: '+(room?room.peers().filter(q=>!q.isMe).length:0)+'<br>Render scale: '+Math.round(adaptiveScale*100)+'% · '+GQ[gq].n+'<br><span style="opacity:.6">build 11</span>';},700);}
 {const b=document.createElement('button');b.className='sbtn';b.style.marginTop='14px';b.textContent='RESUME';b.addEventListener('click',()=>{stp.style.display='none';});stp.appendChild(b);}
 closeButton(stp);mkBtn('🧭',(innerWidth>=700?212:172)+108,togM);
-function layoutMenuButtons(){let i=0;document.querySelectorAll('.mb').forEach(b=>{if(b.classList.contains('menuToggle'))return;if(!b.dataset.baseRight){b.dataset.baseRight=b.style.right;b.dataset.baseTop=b.style.top;}if(innerWidth<600){b.style.right=(10+(i%2)*52)+'px';b.style.top='calc(env(safe-area-inset-top,0px) + '+(66+Math.floor(i/2)*52)+'px)';}else{b.style.right=b.dataset.baseRight;b.style.top=b.dataset.baseTop;}i++;});}
-layoutMenuButtons();addEventListener('resize',layoutMenuButtons);
+function layoutMenuButtons(){const columns=innerWidth<600?2:4,top=document.body.classList.contains('touch')?118:66,gap=6;let i=0;
+  document.querySelectorAll('.mb').forEach(b=>{if(b.classList.contains('menuToggle'))return;b.style.right=(10+(i%columns)*(46+gap))+'px';b.style.top='calc(env(safe-area-inset-top,0px) + '+(top+Math.floor(i/columns)*(46+gap))+'px)';i++;});}
+layoutMenuButtons();addEventListener('resize',layoutMenuButtons);setTimeout(layoutMenuButtons,0);
 $('mhome').addEventListener('pointerdown',e=>{e.preventDefault();if(nav&&nav.home){nav=null;toast('GPS off');}else if(sv.house&&BLD[sv.unit]){const dd=doorOf(sv.unit);setNav(dd.x,dd.z,'Home',1);}else setNav(34,32,'Skyline Tower (buy a home)',1);mpn.style.display='none';});
 $('mrace').addEventListener('pointerdown',e=>{e.preventDefault();startRace();mpn.style.display='none';});
 async function startRace(){if(!room||!cloudUser){toast('Sign in to race friends online.');return;}const ids=LM.map(l=>l.id).sort(()=>rnd()-.5).slice(0,4);
@@ -2139,6 +2141,7 @@ menuToggle=mkBtn('☰',10,()=>document.body.classList.toggle('menu-open'));menuT
 layoutMenuButtons();
 {const menuStyle=document.createElement('style');menuStyle.textContent='body .mb:not(.menuToggle){display:none!important}body.menu-open .mb:not(.menuToggle){display:flex!important}body .mb.menuToggle{display:flex!important;right:10px;top:calc(env(safe-area-inset-top,0px) + 10px)}body.private-visit #hud,body.private-visit #jobEl,body.private-visit #cityChip,body.private-visit #hint,body.private-visit #toast,body.private-visit #notes,body.private-visit .radar,body.private-visit #activityFeed,body.private-visit .mb,body.private-visit #weaponCard,body.private-visit #loadoutEl,body.private-visit #jfix,body.private-visit .b,body.private-visit .pn{display:none!important}body.private-visit canvas{pointer-events:none}';document.head.appendChild(menuStyle);}
 document.addEventListener('pointerdown',e=>{if(document.body.classList.contains('menu-open')&&!e.target.closest('.mb'))document.body.classList.remove('menu-open');},true);
+{const controlsStyle=document.createElement('style');controlsStyle.textContent='body.touch.menu-open .b,body.touch.menu-open #pauseBtn{visibility:hidden}';document.head.appendChild(controlsStyle);}
 const _cm=closeMenus;closeMenus=function(){const o=hp2.style.display==='block'||stp.style.display==='block';hp2.style.display=stp.style.display='none';return _cm()||o;};
 function answerInv(ok){if(!invFrom)return;const f=invFrom;invFrom=null;homeInv.style.display='none';if(!ok)return;if(pl.mode!=='walk'){toast('Get out of the car first');return;}if(!BLD[f.b])return;ensureRoom(f.b);tp((507+SH),zOf(f.b),Math.PI/2,'Welcome to '+f.n+"'s home");}
 function showInv(b,n){invFrom={b,n};homeInv.innerHTML='<b>'+n.replace(/[<>&]/g,'')+'</b> invites you to their home';
@@ -2564,7 +2567,7 @@ function dailyTick(dt,c0,d0){
     if(notified!==di.s){notified=di.s;notify('\ud83d\udcb0 CASH DROP LIVE',fmtN(di.rw)+' waiting. Be the first to reach it!','#ff4dd2');}
     dropM.visible=true;dropM.position.set(di.x,0,di.z);dropM.userData.m.opacity=.3+Math.sin(performance.now()/200)*.1;
     const dx=di.x-p.x,dz=di.z-p.z,dist=Math.hypot(dx,dz);cam.getWorldDirection(dv);const rel=wrapA(Math.atan2(dx,dz)-Math.atan2(dv.x,dv.z));
-    txt='<b style="color:#ff4dd2">\ud83d\udcb0 CASH DROP</b> '+fmtN(di.rw)+'<br><span style="display:inline-block;transform:rotate('+(-rel)+'rad)">\u25b2</span> '+Math.round(dist)+' m \u00b7 '+fmtT(di.left);
+    txt='<b style="color:#ff4dd2">\ud83d\udcb0 CASH DROP</b> '+fmtN(di.rw)+'<br><span aria-label="Direction to cash drop" title="Direction to cash drop" style="display:inline-block;transform:rotate('+(-rel)+'rad)">↑</span> '+Math.round(dist)+' m \u00b7 '+fmtT(di.left);
     if(dist<7&&!pl.dead){sv.dropS=di.s;cash+=di.rw;notify('\ud83d\udcb0 CASH DROP','You grabbed '+fmtN(di.rw)+'!','#ffd24a');prog('drop',1);addCred(10,'cash drop');if(room)room.emit('drop',{s:di.s,n:myName()}).catch(()=>{});dirty=1;persist();dropM.visible=false;txt='';}}
   else dropM.visible=false;
   if(dropEl._t!==txt){dropEl._t=txt;dropEl.innerHTML=txt;dropEl.style.display=txt?'block':'none';}
