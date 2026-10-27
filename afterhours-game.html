@@ -172,15 +172,15 @@ const sky=new T.Mesh(new T.SphereGeometry(mobile?300:490,32,20),new T.ShaderMate
 const hemi=new T.HemisphereLight(0x9ab0ff,0x2a2018,.9);scene.add(hemi);
 const sun=new T.DirectionalLight(0xffd7a8,1.0);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
 Object.assign(sun.shadow.camera,{left:-45,right:45,top:45,bottom:-45,near:1,far:125});sun.shadow.bias=-0.00035;sun.shadow.normalBias=.025;sun.shadow.radius=3;scene.add(sun,sun.target);
-const DAY_LENGTH_SECONDS=24*60,DAY_SECONDS=24*60*60,dayColors={nightSky:new T.Color(0x151323),daySky:new T.Color(0x86b6dc),nightFog:new T.Color(0x151323),dayFog:new T.Color(0x9bb7c8),nightHemi:new T.Color(0x435078),dayHemi:new T.Color(0xbde0ff),nightGround:new T.Color(0x171820),dayGround:new T.Color(0x554b3b),nightSun:new T.Color(0x7787c4),daySun:new T.Color(0xffd7a8),streetDay:new T.Color(0x505568),streetNight:new T.Color(0xffe8b0)};
+const DAY_LENGTH_SECONDS=24*60,DAY_SECONDS=24*60*60,dayColors={nightSky:new T.Color(0x151323),daySky:new T.Color(0x86b6dc),nightFog:new T.Color(0x252a3b),dayFog:new T.Color(0x9bb7c8),nightHemi:new T.Color(0x7888aa),dayHemi:new T.Color(0xbde0ff),nightGround:new T.Color(0x30343e),dayGround:new T.Color(0x554b3b),nightSun:new T.Color(0x9aa9d0),daySun:new T.Color(0xffd7a8),streetDay:new T.Color(0x505568),streetNight:new T.Color(0xffe8b0)};
 let gameSeconds=8*60*60,gameHours=8,daylight=1,dayNightUpdateAt=0;
 const smoothTime=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
 function updateDayNight(now){
   if(now<dayNightUpdateAt)return;dayNightUpdateAt=now+250;
   gameHours=gameSeconds/3600;const day=smoothTime(5,8,gameHours)*(1-smoothTime(17,20,gameHours));daylight=day;
   scene.background.lerpColors(dayColors.nightSky,dayColors.daySky,day);scene.fog.color.lerpColors(dayColors.nightFog,dayColors.dayFog,day);
-  hemi.color.lerpColors(dayColors.nightHemi,dayColors.dayHemi,day);hemi.groundColor.lerpColors(dayColors.nightGround,dayColors.dayGround,day);hemi.intensity=.24+day*.78;
-  sun.color.lerpColors(dayColors.nightSun,dayColors.daySun,day);sun.intensity=.12+day*1.15;
+  hemi.color.lerpColors(dayColors.nightHemi,dayColors.dayHemi,day);hemi.groundColor.lerpColors(dayColors.nightGround,dayColors.dayGround,day);hemi.intensity=.68+day*.34;
+  sun.color.lerpColors(dayColors.nightSun,dayColors.daySun,day);sun.intensity=.22+day*1.05;
   sky.material.uniforms.uDaylight.value=day;
   for(const material of windowMaterials)material.emissiveIntensity=.08+(1-day)*1.12;
   if(streetLampMesh)streetLampMesh.material.color.lerpColors(dayColors.streetNight,dayColors.streetDay,day);
