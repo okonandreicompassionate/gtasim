@@ -39,6 +39,7 @@ body.walk #gauge{display:none}
 @media(max-height:600px) and (orientation:portrait){body.touch.drive #gauge{display:none}}
 @media(max-height:600px) and (orientation:landscape){body.touch.drive #gauge{display:none}}
 body.touch #toast{top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 100px);z-index:10}
+body.football-match #toast{top:calc(env(safe-area-inset-top,0px) + 140px);bottom:auto;z-index:12}
 body.touch.drive #hint{display:none!important}
 body.touch.drive #toast{bottom:calc(env(safe-area-inset-bottom,0px) + 190px)}
 #nitroHud{display:none;margin-top:4px;color:#7ce6ff;font-size:10px;font-weight:800}
@@ -260,8 +261,14 @@ function winTextures(){const cells=[];for(let i=0;i<64;i++)cells.push(rnd()>.45)
     const t=new T.CanvasTexture(c);t.wrapS=t.wrapT=T.RepeatWrapping;return t;};
   return[mk(false),mk(true)];}
 const [wTex,wEm]=winTextures();const BLD=[],windowMaterials=[];let streetLampMesh=null;
+const CAREER_STADIUMS=[
+  {id:'national-stadium',name:'Lagos National Stadium',x:416,z:-160,doorZ:-104,w:144,d:108,pitchW:92,pitchL:62,primary:true},
+  {id:'island-arena',name:'Island Arena',x:-416,z:-160,doorZ:-110,w:124,d:94,pitchW:76,pitchL:52},
+  {id:'surulere-stadium',name:'Surulere City Stadium',x:96,z:416,doorZ:468,w:120,d:92,pitchW:74,pitchL:50}
+];
+const CAREER_STADIUM_LOTS=[[5,-4],[5,-3],[5,-2],[6,-4],[6,-3],[6,-2],[-7,-4],[-7,-3],[-7,-2],[-6,-4],[-6,-3],[-6,-2],[0,5],[0,6],[1,5],[1,6],[2,5],[2,6]];
 for(let i=N0;i<N1;i++)for(let j=N0;j<N1;j++){
-  if(i < -7||i >= 7||j < -7||j >= 7||(i===-1&&j===0)||(i===0&&j===0)||(i===-5&&j===-5)||BUSINESS_LOTS.some(a=>a[0]===i&&a[1]===j)||[[2,-1],[-3,2],[-4,-3],[3,3],[-1,-3],[3,-4],[-4,3],[-1,1],[0,1],[1,0],[1,1]].some(a=>a[0]===i&&a[1]===j))continue;
+  if(i < -7||i >= 7||j < -7||j >= 7||(i===-1&&j===0)||(i===0&&j===0)||(i===-5&&j===-5)||(i===-5&&j===5)||(i===-6&&j===5)||(i===-7&&j===5)||CAREER_STADIUM_LOTS.some(a=>a[0]===i&&a[1]===j)||BUSINESS_LOTS.some(a=>a[0]===i&&a[1]===j)||[[2,-1],[-3,2],[-4,-3],[3,3],[-1,-3],[3,-4],[-4,3],[-1,1],[0,1],[1,0],[1,1]].some(a=>a[0]===i&&a[1]===j))continue;
   const w=26+rnd()*8,d=26+rnd()*8,tall=rnd()>.55,h=tall?45+rnd()*60:18+rnd()*22,cx=i*PITCH+32,cz=j*PITCH+32;
   const a=wTex.clone(),b=wEm.clone();a.needsUpdate=b.needsUpdate=true;a.repeat.set(w/24,h/24);b.repeat.copy(a.repeat);
   const material=std({map:a,emissiveMap:b,emissive:0xffffff,emissiveIntensity:.8,color:new T.Color().setHSL(.07+rnd()*.12,.12,.55+rnd()*.3),roughness:.85});windowMaterials.push(material);
@@ -1135,7 +1142,7 @@ function openShop(V){shopV=V;$('shT').textContent=V.sp.name;
   if(!V.price)add('STEAL',()=>{V.price=0;hideTag(V);closeShop();toast('Stolen!');enterVeh(V);});
   add('CANCEL',closeShop);$('shop').style.display='block';}
 function toggleHover(){const V=pl.veh;if(V&&V.sp.hover){V.s.hover=!V.s.hover;toast(V.s.hover?'Hover mode':'Ground mode');}}
-function act(){if(pl.dead||pl.arrested||pl.fling||pl.steal)return;if(pl.ride){exitRide();return;}if(shopV){closeShop();return;}if(openRaceBook())return;if(openCityShop())return;if(raceState){toast('Finish the race before leaving.');return;}if(policeStationInteract())return;if(gangInteract())return;
+function act(){if(careerFootball){footballKick(true);return;}if(pl.dead||pl.arrested||pl.fling||pl.steal)return;if(pl.ride){exitRide();return;}if(shopV){closeShop();return;}if(openRaceBook())return;if(openCityShop())return;if(raceState){toast('Finish the race before leaving.');return;}if(careerStadiumInteract())return;if(careerResidenceInteract())return;if(policeStationInteract())return;if(gangInteract())return;
   if(pl.mode==='walk'){const rc=nearRemoteCar();if(rc){openCarOptions(rc);return;}const V=nearestVeh();if(!V)return;
     if(V.price){openShop(V);return;}
     if(V.ai){if(Math.abs(V.ai.v)>9){toast('Too fast to carjack');return;}
@@ -1155,7 +1162,7 @@ function fireTankShell(){const V=pl.veh;if(!V||!V.sp.tank||performance.now()<(V.
   const y=p.y+3.1,x=p.x+dx*4.2,z=p.z+dz*4.2;
   spawnProj('rocket',x,y,z,dx,dz,{r:V.sp.apc?6:8,bd:V.sp.apc?45:70});
   shake=Math.max(shake,.12);gunSound(.65,.8,420);}
-function punch(){if(pl.mode==='drive'&&pl.veh){if(pl.veh.sp.tank)fireTankShell();else if(pl.veh.sp.fighter)fireFighterRocket();return;}if(pl.mode!=='walk'||pl.pt>0||pl.dead||pl.arrested||pl.ride||pl.fling||pl.steal)return;if(typeof tryShoot==='function'&&tryShoot())return;pl.pt=.34;pl.punched=false;}
+function punch(){if(careerFootball){footballKick(false);return;}if(pl.mode==='drive'&&pl.veh){if(pl.veh.sp.tank)fireTankShell();else if(pl.veh.sp.fighter)fireFighterRocket();return;}if(pl.mode!=='walk'||pl.pt>0||pl.dead||pl.arrested||pl.ride||pl.fling||pl.steal)return;if(typeof tryShoot==='function'&&tryShoot())return;pl.pt=.34;pl.punched=false;}
 addEventListener('keydown',e=>{if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'))return;if(privateVisit){e.preventDefault();return;}
   if(e.code==='Escape'){if(!gamePaused&&closeMenus()){e.preventDefault();return;}setPaused(!gamePaused);e.preventDefault();return;}if(gamePaused){e.preventDefault();return;}
   keys[e.code]=1;if((e.code==='KeyV'||e.code==='KeyC')&&!e.repeat)fp=!fp;if((e.code==='KeyF'||e.code==='KeyE'&&!(pl.veh&&pl.veh.sp.aircraft))&&!e.repeat)act();if(e.code==='KeyH'&&!e.repeat){if(pl.veh&&pl.veh.type==='urus')toggleUrusSport();else toggleHover();}if(e.code==='KeyJ'&&!e.repeat)punch();
@@ -1267,7 +1274,7 @@ function loop(now){rafId=0;if(gamePaused||document.hidden)return;const frameMs=M
     if(nearby<10&&traffic.length>=AIT){const remote=traffic.filter(v=>Math.hypot(v.g.position.x-pl.g.position.x,v.g.position.z-pl.g.position.z)>120).sort((a,b)=>b.g.position.distanceTo(pl.g.position)-a.g.position.distanceTo(pl.g.position))[0];if(remote){removeVeh(remote);traffic=traffic.filter(v=>v!==remote);}}
     if(traffic.length<AIT)spawnAI();}
   camUpdate(dt);cam.updateMatrixWorld();pedBars();plates();aimStep(dt);gx2(dt);
-  let ht='';if(pl.ride)ht='F: get out of the car';else if(pl.mode==='walk'&&!pl.dead&&!pl.fling&&!pl.steal&&Math.hypot(pl.g.position.x-POLICE_STATION.x,pl.g.position.z-POLICE_STATION.doorZ)<5)ht='E: Police Station · reception / pay fine';else if(pl.mode==='walk'&&!pl.dead&&!pl.fling&&!pl.steal&&Math.hypot(pl.g.position.x-GANG_HOUSE.x,pl.g.position.z-GANG_HOUSE.doorZ)<5)ht='E: Crew House · register / missions';else if(pl.mode==='walk'&&!pl.dead&&!pl.fling&&!pl.steal){if(nearRemoteCar())ht='F: ride along / steal';else if(typeof raceSpot!=='undefined'&&Math.hypot(pl.g.position.x-raceSpot.position.x,pl.g.position.z-raceSpot.position.z)<5)ht='F: book a race';else if(typeof shopHint==='function'&&shopHint())ht=shopHint();else{const V=nearestVeh();if(V)ht=V.price?'E: buy '+V.sp.name+' · '+money(V.price):V.ai?'F: carjack':'E: get in';}}else if(pl.mode==='drive'&&pl.veh.sp.aircraft)ht='W/S forward · A/D yaw · Q/E slide · Space climb · Shift descend'+(pl.veh.sp.fighter?' · J fire rockets':'')+' · F exit';else if(pl.mode==='drive'&&pl.veh.sp.tank)ht='W/S drive · A/D steer · J or FIRE to shoot';else if(pl.mode==='drive'&&pl.veh.type==='urus')ht='W accelerate · S brake/reverse · A/D steer · Space brake · Shift handbrake · hold N nitro · H Sport';else if(pl.mode==='drive'&&Math.abs(pl.veh.s.u)*3.6<15)ht=raceState?'Race in progress':'F: get out';
+  let ht='';if(careerFootball){footballHud.style.display=careerFootball.type==='match'?'block':'none';if(careerFootball.type!=='match')ht='ACADEMY TRIAL · '+careerFootball.goals+'/3 goals · '+Math.ceil(careerFootball.time)+'s · E PASS · J SHOOT';}else if(pl.ride)ht='F: get out of the car';else if(pl.mode==='walk'&&!pl.dead&&!pl.fling&&!pl.steal&&CAREER_STADIUMS.some(item=>Math.hypot(pl.g.position.x-item.x,pl.g.position.z-item.doorZ)<5))ht='E: Enter stadium · play career match';else if(pl.mode==='walk'&&!pl.dead&&!pl.fling&&!pl.steal&&careerResidenceNear())ht='E: Career residence · view ownership';else if(pl.mode==='walk'&&!pl.dead&&!pl.fling&&!pl.steal&&Math.hypot(pl.g.position.x-POLICE_STATION.x,pl.g.position.z-POLICE_STATION.doorZ)<5)ht='E: Police Station · reception / pay fine';else if(pl.mode==='walk'&&!pl.dead&&!pl.fling&&!pl.steal&&Math.hypot(pl.g.position.x-GANG_HOUSE.x,pl.g.position.z-GANG_HOUSE.doorZ)<5)ht='E: Crew House · register / missions';else if(pl.mode==='walk'&&!pl.dead&&!pl.fling&&!pl.steal){if(nearRemoteCar())ht='F: ride along / steal';else if(typeof raceSpot!=='undefined'&&Math.hypot(pl.g.position.x-raceSpot.position.x,pl.g.position.z-raceSpot.position.z)<5)ht='F: book a race';else if(typeof shopHint==='function'&&shopHint())ht=shopHint();else{const V=nearestVeh();if(V)ht=V.price?'E: buy '+V.sp.name+' · '+money(V.price):V.ai?'F: carjack':'E: get in';}}else if(pl.mode==='drive'&&pl.veh.sp.aircraft)ht='W/S forward · A/D yaw · Q/E slide · Space climb · Shift descend'+(pl.veh.sp.fighter?' · J fire rockets':'')+' · F exit';else if(pl.mode==='drive'&&pl.veh.sp.tank)ht='W/S drive · A/D steer · J or FIRE to shoot';else if(pl.mode==='drive'&&pl.veh.type==='urus')ht='W accelerate · S brake/reverse · A/D steer · Space brake · Shift handbrake · hold N nitro · H Sport';else if(pl.mode==='drive'&&Math.abs(pl.veh.s.u)*3.6<15)ht=raceState?'Race in progress':'F: get out';
   hintEl.style.display=ht?'block':'none';if(ht)hintEl.textContent=ht;
   if(toastT>0){toastT-=dt;if(toastT<=0)toastEl.style.display='none';}
   hpEl.style.width=pl.hp+'%';$('hpn').textContent='♥ '+Math.ceil(pl.hp);const wantedMarkup='<span>WANTED '+wantedLevel+'/3</span><span style="color:#ffcc4d">'+('★'.repeat(wantedLevel))+'</span><span style="color:rgba(255,255,255,.3)">'+('☆'.repeat(3-wantedLevel))+'</span>';if($('wline').innerHTML!==wantedMarkup){$('wline').innerHTML=wantedMarkup;$('wline').setAttribute('aria-label','Wanted level: '+wantedLevel+' of three stars');}
@@ -1310,7 +1317,7 @@ function gx2(dt){const p=ppos();board.visible=!mis;board.userData.m.opacity=.3+M
       if(mis){cam.getWorldDirection(dv);const rel=wrapA(Math.atan2(dx,dz)-Math.atan2(dv.x,dv.z));
         txt='<b>'+mis.n+'</b> · '+(mis.race?'CP '+(mis.i+1)+'/'+mis.pts.length:mis.i?'DELIVER':'PICK UP')+'<br><span aria-label="Direction to checkpoint" title="Direction to checkpoint" style="display:inline-block;transform:rotate('+(-rel)+'rad)">↑</span> '+Math.round(d)+' m · '+Math.max(0,mis.t|0)+' s · '+fmtN(mis.pay);}}}
   if(!mis)txt='Jobs done '+done+' · earned '+fmtN(earned)+'<br><span style="color:#3ddc84">Green marker = new job</span>';
-  mp(dt);mp2(dt);houseStep(dt);gangStep(dt);gx3(dt);
+  mp(dt);mp2(dt);houseStep(dt);gangStep(dt);careerFootballStep(dt);gx3(dt);
   if(raceState)txt='<b>'+raceState.kind.toUpperCase()+' RACE</b> · LAP '+Math.min(Math.floor(raceState.checkpoint/LAP_CP.length)+1,LAPS)+'/'+LAPS+' · '+Math.ceil(raceState.countdown>0?raceState.countdown:raceState.elapsed)+' s';
   if(gangRun)txt='<b>'+gangRun.hud+'</b><br><span style="color:#ffcc4d">'+sv.gang.name+'</span> · '+GANG_MISSIONS[gangRun.type].title;
   jobEl.innerHTML=txt+(room?'<br>Online: '+(1+rem.size):'');jobEl.style.display=document.body.classList.contains('touch')&&!mis&&!raceState&&!gangRun?'none':'block';}
@@ -1395,6 +1402,22 @@ function mp(dt){if(!room)return;mpT+=dt;
 let sv={nm:'',lk:[0xb3001b,0x1a1a1f,0x5a3a22,0x0a0a0a],house:0,cars:[]};
 let cloudUser=null,cloudReady=false,saveTimer=0;
 const gangStorageKey=id=>'ah_gang_v1:'+(id||'guest');
+const careerStorageKey=id=>'ah_career_v1:'+(id||'guest');
+const CAREER_POSITIONS=['Forward','Midfielder','Defender','Goalkeeper'];
+const newCareer=()=>({name:'Rookie',position:'Forward',stage:0,wallet:30000000,fitness:85,energy:90,mood:70,reputation:0,matches:0,wins:0,goals:0,training:0,stats:{pace:45,passing:45,shooting:45,control:45},properties:[],cars:[]});
+function validCareer(c){return !!(c&&typeof c==='object'&&typeof c.name==='string'&&c.name.length<=24&&CAREER_POSITIONS.includes(c.position)&&Number.isInteger(+c.stage)&&+c.stage>=0&&+c.stage<=3&&['wallet','fitness','energy','mood','reputation','matches','wins','goals','training'].every(k=>Number.isFinite(+c[k]))&&c.stats&&['pace','passing','shooting','control'].every(k=>Number.isFinite(+c.stats[k]))&&Array.isArray(c.properties)&&Array.isArray(c.cars));}
+function cleanCareer(c){
+  if(!validCareer(c))return null;
+  return{name:c.name.trim().slice(0,24)||'Rookie',position:c.position,stage:clamp(c.stage|0,0,3),wallet:Math.max(0,Math.floor(+c.wallet)),fitness:clamp(+c.fitness,0,100),energy:clamp(+c.energy,0,100),mood:clamp(+c.mood,0,100),reputation:Math.max(0,c.reputation|0),matches:Math.max(0,c.matches|0),wins:Math.max(0,c.wins|0),goals:Math.max(0,c.goals|0),training:Math.max(0,c.training|0),stats:Object.fromEntries(['pace','passing','shooting','control'].map(k=>[k,clamp(+c.stats[k],1,99)])),properties:[...new Set(c.properties.filter(p=>['starter-flat','city-villa','lagos-mansion'].includes(p)))],cars:[...new Set(c.cars.filter(v=>typeof v==='string'&&v.length<30))]};
+}
+function readCareer(id){try{return cleanCareer(JSON.parse(localStorage.getItem(careerStorageKey(id))||'null'));}catch(error){console.warn('Career save could not be read:',error);return null;}}
+let career=readCareer()||newCareer();
+let careerFootball=null,footballBall=null,footballMarker=null,careerMatchActors=[];
+function persistCareer(){
+  try{localStorage.setItem(careerStorageKey(cloudUser?cloudUser.id:sv.uid),JSON.stringify(career));}
+  catch(error){console.error('Career save failed:',error);toast('Career progress could not be saved on this device.');}
+  persist();
+}
 function validGang(g){return !!(g&&typeof g.name==='string'&&/^[A-Za-z0-9][A-Za-z0-9 _-]{1,23}$/.test(g.name.trim())&&Number.isInteger(+g.color)&&+g.color>=0&&+g.color<=0xffffff&&Number.isFinite(+g.rep)&&+g.rep>=0&&Number.isFinite(+g.completed)&&+g.completed>=0);}
 function readGang(id){try{const g=JSON.parse(localStorage.getItem(gangStorageKey(id))||'null');return validGang(g)?{name:g.name.trim(),color:Number.isFinite(+g.color)?(+g.color>>>0):0xe5484d,rep:Math.max(0,g.rep|0),completed:Math.max(0,g.completed|0)}:null;}catch(error){console.warn('Gang save could not be read:',error);return null;}}
 sv.gang=readGang();
@@ -1407,7 +1430,7 @@ async function saveCloud(){
   let results;
   try{results=await Promise.all([
       db.from('profiles').upsert({user_id:userId,display_name:displayName,appearance:{colors:sv.lk}},{onConflict:'user_id'}),
-      db.from('player_saves').upsert({user_id:userId,cash:Math.max(0,Math.floor(cash)),owns_apartment:!!sv.house,apartment_unit:sv.house?sv.unit:null,weapons:{guns:sv.guns||[],ammo:sv.ammo||{},mag:sv.mag||{},eq:pl.eq||null,dy:sv.dy||null,dropS:sv.dropS||0,cr:sv.cred|0,crd:sv.crd||'',gang:sv.gang||null},updated_at:new Date().toISOString()},{onConflict:'user_id'}),
+      db.from('player_saves').upsert({user_id:userId,cash:Math.max(0,Math.floor(cash)),owns_apartment:!!sv.house,apartment_unit:sv.house?sv.unit:null,weapons:{guns:sv.guns||[],ammo:sv.ammo||{},mag:sv.mag||{},eq:pl.eq||null,dy:sv.dy||null,dropS:sv.dropS||0,cr:sv.cred|0,crd:sv.crd||'',gang:sv.gang||null,career},updated_at:new Date().toISOString()},{onConflict:'user_id'}),
       db.from('game_stats').upsert({user_id:userId,jobs_completed:done,cash_earned:Math.max(0,Math.floor(earned)),best_race_seconds:bestRace||null,kills:sv.kills||0,deaths:sv.deaths||0,updated_at:new Date().toISOString()},{onConflict:'user_id'})
     ]);
   }catch(error){console.error('Cloud save failed:',error);toast('Cloud save failed. Check your connection.');return;}
@@ -1429,7 +1452,7 @@ async function loadCloud(user){
   if(!user||cloudUser&&cloudUser.id===user.id)return;
   const importingLocal=!sv.uid;
   if(sv.uid&&sv.uid!==user.id){
-    sv={nm:'',lk:[0xb3001b,0x1a1a1f,0x5a3a22,0x0a0a0a],house:0,cars:[],seen:[],uid:user.id,guns:[],ammo:{},gang:null};pl.eq=null;weaponHud();
+    sv={nm:'',lk:[0xb3001b,0x1a1a1f,0x5a3a22,0x0a0a0a],house:0,cars:[],seen:[],uid:user.id,guns:[],ammo:{},gang:null};career=readCareer(user.id)||newCareer();pl.eq=null;weaponHud();
     cash=500000000;done=0;earned=0;
   }else sv.uid=user.id;
   cloudUser=user;cloudReady=false;
@@ -1455,7 +1478,7 @@ async function loadCloud(user){
   }
   if(save.data){
     cash=Number(save.data.cash);sv.house=save.data.owns_apartment?1:0;sv.unit=save.data.apartment_unit;
-    {const w0=save.data.weapons;if(w0&&Number.isFinite(+w0.cr)){sv.cred=Math.max(0,w0.cr|0);if(w0.crd)sv.crd=String(w0.crd);}if(w0&&w0.dy&&typeof w0.dy==='object'){const L=sv.dy;if(!L||String(w0.dy.last||'')>=String(L.last||''))sv.dy=w0.dy;if((w0.dropS|0)>(sv.dropS|0))sv.dropS=w0.dropS|0;}if(w0&&validGang(w0.gang))sv.gang={name:w0.gang.name.trim(),color:(+w0.gang.color>>>0)||0xe5484d,rep:Math.max(0,w0.gang.rep|0),completed:Math.max(0,w0.gang.completed|0)};else sv.gang=readGang(user.id)||(importingLocal?sv.gang:null);}
+    {const w0=save.data.weapons;if(w0&&Number.isFinite(+w0.cr)){sv.cred=Math.max(0,w0.cr|0);if(w0.crd)sv.crd=String(w0.crd);}if(w0&&w0.dy&&typeof w0.dy==='object'){const L=sv.dy;if(!L||String(w0.dy.last||'')>=String(L.last||''))sv.dy=w0.dy;if((w0.dropS|0)>(sv.dropS|0))sv.dropS=w0.dropS|0;}if(w0&&validGang(w0.gang))sv.gang={name:w0.gang.name.trim(),color:(+w0.gang.color>>>0)||0xe5484d,rep:Math.max(0,w0.gang.rep|0),completed:Math.max(0,w0.gang.completed|0)};else sv.gang=readGang(user.id)||(importingLocal?sv.gang:null);career=cleanCareer(w0&&w0.career)||readCareer(user.id)||(importingLocal?career:null)||newCareer();}
     const wp=save.data.weapons;if(wp&&Array.isArray(wp.guns)){sv.guns=wp.guns.filter(k=>WEAPONS[k]);sv.ammo=wp.ammo&&typeof wp.ammo==='object'?wp.ammo:{};sv.mag=wp.mag&&typeof wp.mag==='object'?wp.mag:{};pl.eq=WEAPONS[wp.eq]&&sv.guns.includes(wp.eq)?wp.eq:null;weaponHud();}
   }
   sv.cars=cars.data.length?cars.data.slice(0,8).map(v=>v.vehicle_type):(importingLocal?sv.cars:[]);
@@ -1721,8 +1744,124 @@ LM[LM.length-1].ax=POLICE_STATION.x;LM[LM.length-1].az=POLICE_STATION.doorZ;
   const lamp=new T.PointLight(0x58aaff,1.1,26);lamp.position.set(x,6,front-4);scene.add(lamp);
   for(const px of[x-10,x+10]){box(scene,.3,.25,.3,trim,px,9.4,z);const beacon=new T.PointLight(0x58aaff,.4,10);beacon.position.set(px,9.8,z);scene.add(beacon);}
 }
+const CAREER_PITCH={x:-288,z:352,width:38,length:58},careerPitchMarker=mkMarker(0x35d37f);
+careerPitchMarker.position.set(CAREER_PITCH.x,0,CAREER_PITCH.z+30);
+addLM('academy-pitch','Academy Training Ground',CAREER_PITCH.x,CAREER_PITCH.z+30);
+LM[LM.length-1].ax=CAREER_PITCH.x;LM[LM.length-1].az=CAREER_PITCH.z+30;
+{
+  const {x,z,width:w,length:l}=CAREER_PITCH,grass=std({color:0x247541,roughness:.92}),line=std({color:0xe5f2e7,roughness:.8}),white=new T.MeshBasicMaterial({color:0xf0f6ee});
+  const turf=new T.Mesh(new T.PlaneGeometry(w,l),grass);turf.rotation.x=-Math.PI/2;turf.position.set(x,.06,z);turf.receiveShadow=true;scene.add(turf);
+  for(const [bx,bz,bw,bd] of [[x,z-l/2,w,.18],[x,z+l/2,w,.18],[x-w/2,z,.18,l],[x+w/2,z,.18,l],[x,z,w,.16]])box(scene,bw,.035,bd,line,bx,.15,bz);
+  const circle=new T.Mesh(new T.TorusGeometry(5,.12,6,40),white);circle.rotation.x=Math.PI/2;circle.position.set(x,.17,z);scene.add(circle);
+  for(const side of[-1,1]){const goalZ=z+side*(l/2-.6),gx=x;
+    for(const dx of[-5,5])box(scene,.3,2.4,.3,line,gx+dx,1.35,goalZ);
+    box(scene,10.3,.3,.3,line,gx,2.55,goalZ);
+    const net=new T.Mesh(new T.BoxGeometry(10,.2,2.2),new T.MeshBasicMaterial({color:0xeaf0ea,wireframe:true,transparent:true,opacity:.35}));net.position.set(gx,1.1,goalZ+side*.9);scene.add(net);
+  }
+  const sign=tagSprite('ACADEMY','TRAINING GROUND');sign.position.set(x,5.6,z-l/2-7);
+  const ballCanvas=document.createElement('canvas');ballCanvas.width=ballCanvas.height=128;const ballCtx=ballCanvas.getContext('2d');ballCtx.fillStyle='#f7f5eb';ballCtx.fillRect(0,0,128,128);ballCtx.fillStyle='#17212b';
+  for(const [bx,by,r]of[[32,31,13],[96,31,13],[64,75,14],[16,112,11],[112,112,11]]){ballCtx.beginPath();for(let point=0;point<5;point++){const angle=-Math.PI/2+point*Math.PI*2/5;const px=bx+Math.cos(angle)*r,py=by+Math.sin(angle)*r;if(!point)ballCtx.moveTo(px,py);else ballCtx.lineTo(px,py);}ballCtx.closePath();ballCtx.fill();}
+  const ballTexture=new T.CanvasTexture(ballCanvas);
+  footballBall=new T.Mesh(new T.SphereGeometry(.68,24,18),new T.MeshStandardMaterial({color:0xffffff,map:ballTexture,emissive:0x39362b,roughness:.42}));footballBall.visible=false;footballBall.castShadow=true;scene.add(footballBall);
+  footballMarker=new T.Group();
+  const markerRing=new T.Mesh(new T.TorusGeometry(1.05,.11,8,36),new T.MeshBasicMaterial({color:0xffd24a}));
+  markerRing.rotation.x=Math.PI/2;markerRing.position.y=.08;footballMarker.add(markerRing);
+  const markerArrow=new T.Mesh(new T.ConeGeometry(.38,.75,8),new T.MeshBasicMaterial({color:0xffd24a}));
+  markerArrow.rotation.x=Math.PI;markerArrow.position.y=1.8;footballMarker.add(markerArrow);
+  footballMarker.visible=false;scene.add(footballMarker);
+}
+const CAREER_RESIDENCES=[
+  {id:'city-villa',name:'City Villa Estate',x:-352,z:352,doorZ:339,w:25,d:20,h:8},
+  {id:'lagos-mansion',name:'Lagos Mansion Estate',x:-416,z:352,doorZ:336,w:34,d:26,h:11}
+];
+for(const home of CAREER_RESIDENCES){
+  addLM(home.id,home.name,home.x,home.doorZ);LM[LM.length-1].ax=home.x;LM[LM.length-1].az=home.doorZ;
+  const {x,z,w,d,h}=home,front=z-d/2,wall=std({color:home.id==='city-villa'?0xd3c5a6:0xb8c6d6,roughness:.75}),trim=std({color:home.id==='city-villa'?0x795b43:0x263e5a,roughness:.55}),glass=std({color:0x183744,metalness:.25,roughness:.22});
+  const yard=new T.Mesh(new T.PlaneGeometry(w+12,d+12),std({color:0x586553,roughness:.9}));yard.rotation.x=-Math.PI/2;yard.position.set(x,.04,z);yard.receiveShadow=true;scene.add(yard);
+  box(scene,.8,h,d,wall,x-w/2+.4,h/2+.3,z);box(scene,.8,h,d,wall,x+w/2-.4,h/2+.3,z);box(scene,w,h,.8,wall,x,h/2+.3,z+d/2-.4);
+  box(scene,(w-5)/2,h,.8,wall,x-(w+5)/4,h/2+.3,front+.4);box(scene,(w-5)/2,h,.8,wall,x+(w+5)/4,h/2+.3,front+.4);
+  box(scene,5,h,.45,trim,x,h/2+.3,front-.05);box(scene,w+1,.7,d+1,trim,x,h+.65,z);
+  for(const yy of home.id==='city-villa'?[3.5,6.2]:[3.5,7.8])for(const dx of[-w*.28,w*.28])box(scene,3,2.1,.08,glass,x+dx,yy,front-.08);
+  const sign=tagSprite(home.id==='city-villa'?'CITY VILLA':'LAGOS MANSION','CAREER RESIDENCE');sign.position.set(x,h+3,front-1);
+  for(const c of[
+    {x0:x-w/2,x1:x-w/2+.8,z0:z-d/2,z1:z+d/2},
+    {x0:x+w/2-.8,x1:x+w/2,z0:z-d/2,z1:z+d/2},
+    {x0:x-w/2,x1:x+w/2,z0:z+d/2-.8,z1:z+d/2},
+    {x0:x-w/2,x1:x-2.5,z0:front,z1:front+.8},
+    {x0:x+2.5,x1:x+w/2,z0:front,z1:front+.8}])colliders.push(c);
+  addAirBlock(x,z,w,d,h+1);
+}
+for(const stadium of CAREER_STADIUMS){
+  addLM(stadium.id,stadium.name,stadium.x,stadium.doorZ);
+  LM[LM.length-1].ax=stadium.x;LM[LM.length-1].az=stadium.doorZ;
+  const {x,z,w,d,pitchW,pitchL}=stadium;
+  const apron=new T.Mesh(new T.PlaneGeometry(w+22,d+22),std({color:0x343a3b,roughness:.94}));
+  apron.rotation.x=-Math.PI/2;apron.position.set(x,.035,z);apron.receiveShadow=true;scene.add(apron);
+  const turf=new T.Mesh(new T.PlaneGeometry(pitchW,pitchL),std({color:0x287a42,roughness:.94}));
+  turf.rotation.x=-Math.PI/2;turf.position.set(x,.07,z);turf.receiveShadow=true;scene.add(turf);
+  const line=std({color:0xe9f1e7,roughness:.85});
+  for(const [bx,bz,bw,bd] of [[x,z-pitchL/2,pitchW,.22],[x,z+pitchL/2,pitchW,.22],[x-pitchW/2,z,.22,pitchL],[x+pitchW/2,z,.22,pitchL],[x,z,pitchW,.16]]){
+    box(scene,bw,.04,bd,line,bx,.16,bz);
+  }
+  const circle=new T.Mesh(new T.TorusGeometry(7,.16,8,48),new T.MeshBasicMaterial({color:0xf4f6ed}));
+  circle.rotation.x=Math.PI/2;circle.position.set(x,.18,z);scene.add(circle);
+  for(const side of[-1,1]){
+    const goalZ=z+side*(pitchL/2-.65);
+    for(const dx of[-5.5,5.5])box(scene,.32,2.7,.32,line,x+dx,1.45,goalZ);
+    box(scene,11.3,.32,.32,line,x,2.8,goalZ);
+    const net=new T.Mesh(new T.BoxGeometry(11,.2,2.5),new T.MeshBasicMaterial({color:0xf2f5ee,wireframe:true,transparent:true,opacity:.4}));
+    net.position.set(x,1.2,goalZ+side*1.1);scene.add(net);
+  }
+  const seatColors=stadium.primary?[0x173b6d,0x23559a,0xe5e6ed]:[0x5d2435,0xa73548,0xe3c88a];
+  const sideDepth=stadium.primary?22:19,sideLength=d-28,rowCount=5;
+  for(let row=0;row<rowCount;row++){
+    const color=std({color:seatColors[row%seatColors.length],roughness:.82});
+    const offset=stadium.primary?51+row*4:44+row*4;
+    const y=2.2+row*2.15;
+    for(const side of[-1,1]){
+      box(scene,3.8,1.7,sideLength,color,x+side*offset,y,z);
+    }
+    if(row<4){
+      for(const side of[-1,1]){
+        const sx=x+side*(pitchW/2+12+row*4);
+        colliders.push({x0:sx-sideDepth/2,x1:sx+sideDepth/2,z0:z-sideLength/2,z1:z+sideLength/2});
+      }
+    }
+  }
+  const endDepth=stadium.primary?18:16,endWidth=pitchW+24;
+  for(let row=0;row<4;row++){
+    const color=std({color:seatColors[(row+1)%seatColors.length],roughness:.82});
+    const offset=pitchL/2+8+row*3.4,y=2.3+row*2.05;
+    for(const side of[-1,1]){
+      if(side<0)box(scene,endWidth-4,1.6,endDepth,color,x,y,z+side*offset);
+      else{
+        box(scene,endWidth/2-7,1.6,endDepth,color,x-endWidth/4+3.5,y,z+side*offset);
+        box(scene,endWidth/2-7,1.6,endDepth,color,x+endWidth/4-3.5,y,z+side*offset);
+      }
+    }
+  }
+  const fascia=std({color:stadium.primary?0x172b47:0x4a2028,metalness:.22,roughness:.55});
+  box(scene,w+8,2,3,fascia,x,15,z-d/2+3);box(scene,w+8,2,3,fascia,x,15,z+d/2-3);
+  for(const side of[-1,1]){
+    box(scene,3,12,d-16,fascia,x+side*(w/2-3),7,z);
+    const roof=box(scene,24,1.6,d-26,fascia,x+side*(w/2-13),19,z);
+    roof.material=std({color:stadium.primary?0x243b59:0x5b2931,metalness:.16,roughness:.5});
+    colliders.push({x0:x+side*(w/2-4)-2,x1:x+side*(w/2-4)+2,z0:z-d/2+8,z1:z+d/2-8});
+  }
+  for(const sx of[-1,1])for(const sz of[-1,1]){
+    const tx=x+sx*(w/2+6),tz=z+sz*(d/2+6);
+    box(scene,2.4,27,2.4,fascia,tx,13.5,tz);
+    box(scene,8,.7,3,std({color:0xe8f2ff,emissive:0x8dbdff,emissiveIntensity:1.2}),tx-sx*1.4,27.2,tz-sz*1.4);
+  }
+  const sign=tagSprite(stadium.primary?'LAGOS NATIONAL':'CITY FOOTBALL','STADIUM · MATCH DAY');
+  sign.position.set(x,22,z+d/2+10);
+}
 const gangPanel=pnl('gangPanel');gangPanel.style.maxHeight='min(84vh,680px)';
 const policeStationPanel=pnl('policeStationPanel');policeStationPanel.style.maxHeight='min(84vh,520px)';
+const careerPanel=pnl('careerPanel');careerPanel.style.maxHeight='min(88vh,720px)';careerPanel.style.width='min(94vw,520px)';
+const footballHud=document.createElement('div');footballHud.id='footballHud';footballHud.className='gl';footballHud.style.cssText='position:fixed;z-index:11;left:50%;top:calc(env(safe-area-inset-top,0px) + 68px);transform:translateX(-50%);max-width:calc(100vw - 32px);padding:8px 14px;border:1px solid rgba(255,210,74,.72);border-radius:14px;background:rgba(7,12,22,.86);font-size:12px;font-weight:900;line-height:1.35;text-align:center;pointer-events:none;display:none';document.body.appendChild(footballHud);
+const positionFootballHud=()=>{footballHud.style.left=innerWidth<600?'50%':'calc(50% + 70px)';footballHud.style.top='calc(env(safe-area-inset-top,0px) + '+(innerWidth<600?'188px':'68px')+')';};
+positionFootballHud();addEventListener('resize',positionFootballHud);
 function renderPoliceStationPanel(){
   policeStationPanel.replaceChildren();closeButton(policeStationPanel);
   const heading=document.createElement('div');heading.style.cssText='font-size:19px;font-weight:900;margin:2px 0 8px';heading.textContent='POLICE STATION';policeStationPanel.appendChild(heading);
@@ -2055,7 +2194,7 @@ async function loadLeaderboard(){
   sec('💰 Top earners',data.filter(r=>r.cash_earned>0).sort((a,b)=>b.cash_earned-a.cash_earned),r=>money(r.cash_earned));
 }closeButton(mpn);
 const tog0=tog;tog=p=>{mpn.style.display='none';racePanel.style.display='none';tog0(p);};
-function togM(){const o=mpn.style.display==='block';gangPanel.style.display='none';cp.style.display=chp.style.display=friendsPanel.style.display='none';mpn.style.display=o?'none':'block';if(!o){renderList();drawMap();if(cloudUser)loadLeaderboard();else $('leaderboard').textContent='Sign in to view the online leaderboard.';}}
+function togM(){const o=mpn.style.display==='block';careerPanel.style.display='none';gangPanel.style.display='none';cp.style.display=chp.style.display=friendsPanel.style.display='none';mpn.style.display=o?'none':'block';if(!o){renderList();drawMap();if(cloudUser)loadLeaderboard();else $('leaderboard').textContent='Sign in to view the online leaderboard.';}}
 const stp=pnl('stp');stp.style.cssText+=';top:62px;left:auto;right:8px;transform:none;width:min(92vw,320px)';
 function saveSet(){try{localStorage.ah_set=JSON.stringify(SET);}catch(e){}}
 function slider(lbl,key,min,max,step,fmt){const w=document.createElement('div');w.style.cssText='margin:12px 0 4px';const v=document.createElement('b');v.style.float='right';v.style.color='#ffd24a';const i=document.createElement('input');i.type='range';i.min=min;i.max=max;i.step=step;i.value=SET[key];i.style.cssText='width:100%;padding:0;accent-color:#ffd24a;height:28px';
@@ -2069,7 +2208,7 @@ slider('🎯 Scope aim speed','aim',.3,2.5,.05,x=>x.toFixed(2)+'×');
 {const d=document.createElement('div');d.style.cssText='margin-top:14px;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.35);font:12px/1.5 system-ui';stp.appendChild(d);
   setInterval(()=>{if(stp.style.display!=='block')return;const ch=liveChannel;d.innerHTML='🌐 <b>Online status</b><br>Account: '+(cloudUser?'<span style="color:#6bff9a">signed in</span>':'<span style="color:#ff8a8a">NOT signed in (use 👤)</span>')+'<br>Realtime: '+(ch?(ch.state==='joined'?'<span style="color:#6bff9a">connected</span>':'<span style="color:#ffb347">'+ch.state+'</span>'):'<span style="color:#ff8a8a">not connected</span>')+'<br>Players seen: '+(room?room.peers().filter(q=>!q.isMe).length:0)+'<br>Render scale: '+Math.round(adaptiveScale*100)+'% · '+GQ[gq].n+'<br><span style="opacity:.6">build 11</span>';},700);}
 {const b=document.createElement('button');b.className='sbtn';b.style.marginTop='14px';b.textContent='RESUME';b.addEventListener('click',()=>{stp.style.display='none';});stp.appendChild(b);}
-closeButton(stp);mkBtn('🧭',(innerWidth>=700?212:172)+108,togM);
+closeButton(stp);mkBtn('🧭',(innerWidth>=700?212:172)+108,togM);const careerButton=mkBtn('⚽',(innerWidth>=700?212:172)+270,openCareerPanel);careerButton.setAttribute('aria-label','Open football career');
 function layoutMenuButtons(){const columns=innerWidth<600?2:4,top=document.body.classList.contains('touch')?118:66,gap=6;let i=0;
   document.querySelectorAll('.mb').forEach(b=>{if(b.classList.contains('menuToggle'))return;b.style.right=(10+(i%columns)*(46+gap))+'px';b.style.top='calc(env(safe-area-inset-top,0px) + '+(top+Math.floor(i/columns)*(46+gap))+'px)';i++;});}
 layoutMenuButtons();addEventListener('resize',layoutMenuButtons);setTimeout(layoutMenuButtons,0);
@@ -2662,11 +2801,248 @@ function renderCityShop(){const s=SHOPS[openShopId];if(!s)return;cityPanel.style
     const available=loungeGuests.filter(g=>!g.booked&&performance.now()>=g.availableAt);
     for(const guest of available){const b=document.createElement('button');b.className='sbtn';b.textContent='Book '+guest.name+' · '+guest.age+'+ · ₦2,500,000';b.addEventListener('click',()=>bookPrivateVisit(guest));cityPanel.appendChild(b);}
     if(!available.length){const wait=document.createElement('div');wait.style.opacity='.7';wait.textContent='Everyone is currently unavailable. Please come back later.';cityPanel.appendChild(wait);}
+    appendCareerVenueActions(cityPanel,s.id);
     closeButton(cityPanel);return;
   }
   cityPanel.innerHTML='<b>'+s.name+'</b><div style="opacity:.75;margin:4px 0 2px">Cash '+money(cash)+'</div>';
   for(const[t,f,dim]of shopItems(s)){const b=document.createElement('button');b.className='sbtn';b.textContent=t;if(dim||!f)b.style.opacity=.45;else b.addEventListener('click',f);cityPanel.appendChild(b);}
+  appendCareerVenueActions(cityPanel,s.id);
   closeButton(cityPanel);}
+const CAREER_STAGES=['Academy Prospect','Reserve Player','First-Team Starter','Lagos Star'];
+const CAREER_CARS=[['dirtbike',18e6],['sportbike',38e6],['suv',85e6],['roadster',300e6]];
+const CAREER_HOMES=[['starter-flat','Starter Apartment',20e6,0],['city-villa','City Villa',200e6,40],['lagos-mansion','Lagos Mansion',650e6,120]];
+const CAREER_VENUES={
+  gym:{title:'CONDITIONING SESSION',cost:250000,animation:4,effect:'Fitness +5 · Energy -14 · Shooting +1',apply(){career.fitness=clamp(career.fitness+5,0,100);career.energy=clamp(career.energy-14,0,100);career.stats.shooting=clamp(career.stats.shooting+1,1,99);career.reputation+=2;}},
+  hotel:{title:'REST & RECOVERY',cost:180000,animation:0,effect:'Energy +28 · Fitness +7 · Mood +5',apply(){career.energy=clamp(career.energy+28,0,100);career.fitness=clamp(career.fitness+7,0,100);career.mood=clamp(career.mood+5,0,100);}},
+  velvet:{title:'NIGHT OUT · DANCE',cost:400000,animation:1,effect:'Mood +18 · Energy -12 · Fitness -4',apply(){career.mood=clamp(career.mood+18,0,100);career.energy=clamp(career.energy-12,0,100);career.fitness=clamp(career.fitness-4,0,100);career.reputation+=3;}},
+  cinema:{title:'MOVIE NIGHT',cost:80000,animation:2,effect:'Mood +12 · Energy +8',apply(){career.mood=clamp(career.mood+12,0,100);career.energy=clamp(career.energy+8,0,100);}},
+  suya:{title:'POST-TRAINING MEAL',cost:45000,animation:2,effect:'Energy +15 · Fitness +2 · Mood +5',apply(){career.energy=clamp(career.energy+15,0,100);career.fitness=clamp(career.fitness+2,0,100);career.mood=clamp(career.mood+5,0,100);}},
+  cafe:{title:'COFFEE & RESET',cost:25000,animation:0,effect:'Energy +8 · Mood +4',apply(){career.energy=clamp(career.energy+8,0,100);career.mood=clamp(career.mood+4,0,100);}}
+};
+function appendCareerVenueActions(panel,id){
+  const activity=CAREER_VENUES[id];if(!activity)return;
+  const section=document.createElement('div');section.style.cssText='margin-top:12px;padding:10px;border-radius:12px;background:rgba(255,210,74,.08);border:1px solid rgba(255,210,74,.25)';
+  const heading=document.createElement('b');heading.textContent='FOOTBALL CAREER · '+activity.title;section.appendChild(heading);
+  const detail=document.createElement('div');detail.style.cssText='margin-top:4px;opacity:.78';detail.textContent=activity.effect+' · Career funds '+money(career.wallet);section.appendChild(detail);
+  const button=document.createElement('button');button.className='sbtn';button.textContent='DO ACTIVITY · '+money(activity.cost);button.disabled=career.wallet<activity.cost;if(button.disabled)button.style.opacity='.5';
+  button.addEventListener('click',()=>{if(career.wallet<activity.cost){toast('Not enough career funds.');return;}career.wallet-=activity.cost;activity.apply();cityPanel.style.display='none';if(!emo)doEmote(activity.animation);persistCareer();toast(activity.title+' complete · '+activity.effect);});
+  section.appendChild(button);panel.appendChild(section);
+}
+function careerBeginTraining(){
+  if(careerFootball){toast('Finish the current academy drill first.');return;}
+  if(pl.mode!=='walk'||pl.dead||pl.veh){toast('Get out of your vehicle before training.');return;}
+  if(Math.hypot(pl.g.position.x-CAREER_PITCH.x,pl.g.position.z-CAREER_PITCH.z)>70){setNav(CAREER_PITCH.x,CAREER_PITCH.z+25,'Academy Training Ground');careerPanel.style.display='none';toast('Follow the GPS to the academy training ground.');return;}
+  careerPanel.style.display='none';footballHud.style.display='none';careerFootball={time:90,goals:0,passes:0};
+  pl.g.position.set(CAREER_PITCH.x,0,CAREER_PITCH.z+19.5);pl.face=cy=Math.PI;pl.g.rotation.y=Math.PI;pl.g.visible=true;
+  footballBall.position.set(CAREER_PITCH.x+1.4,.72,CAREER_PITCH.z+17.5);footballBall.visible=true;
+  $('ba').textContent='PASS';$('bp').textContent='SHOOT';$('bp').classList.add('w');$('bp').classList.remove('d');
+  document.body.classList.remove('menu-open');toast('ACADEMY TRIAL · dribble, then shoot into the north goal. E passes · J shoots.');
+}
+function footballKick(pass){
+  if(!careerFootball||!footballBall)return;
+  const p=pl.g.position,b=footballBall.position,d=Math.hypot(b.x-p.x,b.z-p.z);
+  if(d>(careerFootball.type==='match'?4.5:3.5)){toast('Get closer to the ball first.');return;}
+  let dx=Math.sin(pl.face),dz=Math.cos(pl.face);
+  if(pass&&careerFootball.type==='match'){
+    const teammate=careerMatchActors.filter(actor=>actor.team==='home').sort((a,b)=>Math.hypot(a.root.position.x-p.x,a.root.position.z-p.z)-Math.hypot(b.root.position.x-p.x,b.root.position.z-p.z))[0];
+    if(teammate){dx=teammate.root.position.x-b.x;dz=teammate.root.position.z-b.z;const len=Math.hypot(dx,dz)||1;dx/=len;dz/=len;}
+  }
+  const condition=clamp(.65+(career.fitness+career.energy)/200*.35,.65,1);
+  const power=careerFootball.type==='match'?(pass?18:32+career.stats.shooting*.16)*condition:(pass?11:15+career.stats.shooting*.075);
+  if(careerFootball.type==='match')careerFootball.lastTouch='player';
+  footballBall.userData.vx=dx*power;footballBall.userData.vz=dz*power;
+  footballBall.userData.lastKick=performance.now();if(pass)careerFootball.passes++;careerFootball.kickTime=.28;
+  toast(pass?'Pass played · move to receive.':'Shot away · aim for the north goal.');
+}
+function finishFootballTraining(){
+  if(!careerFootball)return;
+  const result=careerFootball,goals=result.goals;careerFootball=null;footballBall.visible=false;footballBall.userData.vx=footballBall.userData.vz=0;
+  $('ba').textContent='ENTER';$('bp').textContent='PUNCH';$('bp').classList.add('w');$('bp').classList.remove('d');if(footballMarker)footballMarker.visible=false;
+  career.training++;career.goals+=goals;career.stats.control=clamp(career.stats.control+1+Math.min(2,goals),1,99);
+  career.stats.passing=clamp(career.stats.passing+Math.min(3,result.passes),1,99);
+  career.stats.shooting=clamp(career.stats.shooting+(goals?2:1),1,99);career.fitness=clamp(career.fitness-10,0,100);
+  career.energy=clamp(career.energy-12,0,100);career.mood=clamp(career.mood+(goals?6:1),0,100);career.reputation+=goals*4;
+  const reward=1000000+goals*1500000;career.wallet+=reward;persistCareer();
+  toast('TRIAL COMPLETE · '+goals+' goal'+(goals===1?'':'s')+' · +'+money(reward)+' career funds');
+  renderCareerPanel();
+}
+function careerFootballStep(dt){
+  if(!careerFootball||!footballBall)return;
+  if(careerFootball.type==='match'){careerMatchStep(dt);return;}
+  const ball=footballBall,b=ball.position,p=pl.g.position;
+  careerFootball.time-=dt;
+  careerFootball.kickTime=Math.max(0,(careerFootball.kickTime||0)-dt);
+  pl.g.userData.legR.rotation.x=careerFootball.kickTime?-1.05*careerFootball.kickTime/.28:Math.sin(pl.ph)*.35;
+  const previousZ=b.z,v=ball.userData;
+  b.x+=v.vx*dt;b.z+=v.vz*dt;const drag=Math.exp(-1.35*dt);v.vx*=drag;v.vz*=drag;
+  ball.rotation.x+=v.vz*dt*1.6;ball.rotation.z-=v.vx*dt*1.6;
+  if(Math.hypot(b.x-p.x,b.z-p.z)<2.2&&Math.hypot(axes().x,axes().y)>.12){const fx=Math.sin(pl.face),fz=Math.cos(pl.face);v.vx+=fx*dt*5;v.vz+=fz*dt*5;}
+  const goalLine=CAREER_PITCH.z-CAREER_PITCH.length/2;
+  if(previousZ>goalLine&&b.z<=goalLine&&Math.abs(b.x-CAREER_PITCH.x)<5){careerFootball.goals++;toast('GOAL! '+careerFootball.goals+'/3');b.set(CAREER_PITCH.x+1.4,.72,CAREER_PITCH.z+17.5);v.vx=v.vz=0;p.set(CAREER_PITCH.x,0,CAREER_PITCH.z+19.5);pl.face=cy=Math.PI;}
+  if(Math.abs(b.x-CAREER_PITCH.x)>CAREER_PITCH.width/2+3||Math.abs(b.z-CAREER_PITCH.z)>CAREER_PITCH.length/2+4){b.set(CAREER_PITCH.x+1.4,.72,CAREER_PITCH.z+17.5);v.vx=v.vz=0;}
+  if(footballMarker){footballMarker.position.set(b.x,.09,b.z);footballMarker.visible=true;}
+  if(careerFootball.goals>=3||careerFootball.time<=0||pl.dead>0)finishFootballTraining();
+  if(careerFootball&&performance.now()>(careerFootball.hudAt||0)){careerFootball.hudAt=performance.now()+250;$('hint').style.display='block';$('hint').textContent='ACADEMY TRIAL · '+careerFootball.goals+'/3 goals · '+Math.ceil(careerFootball.time)+'s · E PASS · J SHOOT';}
+}
+function makeCareerMatchActor(team,x,z,index){
+  const root=new T.Group(),jersey=std({color:team==='home'?0x2674d9:0xe74654,roughness:.72}),shorts=std({color:team==='home'?0x122747:0x29212a,roughness:.8}),skin=std({color:index%2?0x8c573a:0x633f2c,roughness:.9});
+  const torso=new T.Mesh(new T.BoxGeometry(.78,1,.42),jersey);torso.position.y=1.2;root.add(torso);
+  const head=new T.Mesh(new T.SphereGeometry(.24,10,8),skin);head.position.y=1.88;root.add(head);
+  for(const side of[-1,1]){
+    const leg=new T.Mesh(new T.BoxGeometry(.24,.68,.3),shorts);leg.position.set(side*.2,.36,0);root.add(leg);
+  }
+  root.position.set(x,0,z);scene.add(root);
+  return{root,team,index,kickAt:0,phase:Math.random()*6};
+}
+function careerMatchBegin(){
+  if(careerFootball){toast('Finish the current football session first.');return;}
+  if(pl.mode!=='walk'||pl.dead||pl.veh){toast('Get out of your vehicle before match day.');return;}
+  const stadium=CAREER_STADIUMS.reduce((best,item)=>Math.hypot(pl.g.position.x-item.x,pl.g.position.z-item.doorZ)<Math.hypot(pl.g.position.x-best.x,pl.g.position.z-best.doorZ)?item:best,CAREER_STADIUMS[0]);
+  careerFootball={type:'match',time:150,goals:0,passes:0,teamGoals:0,opponentGoals:0,lastTouch:'',stadium,return:{x:pl.g.position.x,z:pl.g.position.z,face:pl.face}};
+  const {x,z,pitchL}=stadium;
+  pl.g.position.set(x,0,z+4.5);pl.face=cy=camH=Math.PI;pl.g.rotation.y=pl.face;
+  footballBall.position.set(x+1,.72,z+3.5);footballBall.visible=true;footballBall.userData.vx=footballBall.userData.vz=0;
+  footballMarker.position.set(footballBall.position.x,.09,footballBall.position.z);footballMarker.visible=true;
+  careerMatchActors=[
+    makeCareerMatchActor('home',x-17,z+15,0),makeCareerMatchActor('home',x+17,z+12,1),
+    makeCareerMatchActor('away',x-15,z-12,0),makeCareerMatchActor('away',x+15,z-12,1),makeCareerMatchActor('away',x,z-pitchL/2+5,2)
+  ];
+  nav=null;careerPanel.style.display='none';document.querySelectorAll('.pn').forEach(panel=>panel.style.display='none');document.body.classList.add('football-match');
+  $('ba').textContent='PASS';$('bp').textContent='SHOOT';$('bp').classList.add('w');$('bp').classList.remove('d');
+  footballHud.style.display='block';footballHud.textContent=stadium.name+' · LAGOS 0 - 0 OPP · 2:30 · WASD MOVE · E PASS · J SHOOT';
+  document.body.classList.remove('menu-open');
+  toast('KICK-OFF · move with WASD or the left stick, E passes, J shoots.');
+}
+function resetCareerMatchKickoff(){
+  const match=careerFootball,s=match.stadium,{x,z,pitchL}=s;
+  footballBall.position.set(x+1,.72,z+3.5);footballBall.userData.vx=footballBall.userData.vz=0;
+  footballMarker.position.set(footballBall.position.x,.09,footballBall.position.z);footballMarker.visible=true;
+  pl.g.position.set(x,0,z+4.5);pl.face=cy=camH=Math.PI;pl.g.rotation.y=pl.face;
+  careerMatchActors.forEach((actor,i)=>actor.root.position.set(x+(i%3-1)*15,z+(actor.team==='home'?13+i*2:-12-i*3)));
+}
+function careerMatchStep(dt){
+  const match=careerFootball,s=match.stadium,{x,z,pitchW,pitchL}=s,ball=footballBall,b=ball.position,p=pl.g.position,v=ball.userData;
+  p.x=clamp(p.x,x-pitchW/2+1,x+pitchW/2-1);p.z=clamp(p.z,z-pitchL/2+1,z+pitchL/2-1);
+  match.time-=dt;match.kickTime=Math.max(0,(match.kickTime||0)-dt);
+  pl.g.userData.legR.rotation.x=match.kickTime?-1.05*match.kickTime/.28:Math.sin(pl.ph)*.35;
+  const previousZ=b.z;b.x+=v.vx*dt;b.z+=v.vz*dt;const drag=Math.exp(-.86*dt);v.vx*=drag;v.vz*=drag;
+  b.y=.72+Math.min(2.2,Math.hypot(v.vx,v.vz)*.045);
+  ball.rotation.x+=v.vz*dt*1.6;ball.rotation.z-=v.vx*dt*1.6;
+  if(Math.hypot(b.x-p.x,b.z-p.z)<2.2&&Math.hypot(axes().x,axes().y)>.12){const fx=Math.sin(pl.face),fz=Math.cos(pl.face);v.vx+=fx*dt*6;v.vz+=fz*dt*6;match.lastTouch='player';}
+  for(const actor of careerMatchActors){
+    const ap=actor.root.position,dx=b.x-ap.x,dz=b.z-ap.z,d=Math.hypot(dx,dz),nearby=careerMatchActors.filter(other=>other.team===actor.team&&other!==actor&&Math.hypot(other.root.position.x-b.x,other.root.position.z-b.z)<d).length;
+    const targetX=actor.team==='home'&&nearby>0?x+(actor.index-1)*15:b.x;
+    const targetZ=actor.team==='home'&&nearby>0?z+13+actor.index*3:b.z;
+    const tx=targetX-ap.x,tz=targetZ-ap.z,dist=Math.hypot(tx,tz);
+    if(dist>1.8){const step=Math.min(dist,dt*(actor.team==='away'?5.4:4.7));ap.x+=tx/dist*step;ap.z+=tz/dist*step;actor.root.rotation.y=Math.atan2(tx,tz);actor.phase+=dt*9;}
+    if(d<1.8&&performance.now()>actor.kickAt&&Math.hypot(v.vx,v.vz)<15){
+      const targetZ=actor.team==='home'?z-pitchL/2:z+pitchL/2,dirX=x-b.x,dirZ=targetZ-b.z,len=Math.hypot(dirX,dirZ)||1,power=actor.team==='away'?16:15;
+      v.vx=dirX/len*power+(Math.random()-.5)*2;v.vz=dirZ/len*power;actor.kickAt=performance.now()+1600;match.lastTouch=actor.team;
+    }
+  }
+  if(footballMarker){footballMarker.position.set(b.x,.09,b.z);footballMarker.visible=true;}
+  const north=z-pitchL/2,south=z+pitchL/2,insideGoal=Math.abs(b.x-x)<6;
+  if(previousZ>north&&b.z<=north){if(insideGoal){match.teamGoals++;if(match.lastTouch==='player')match.goals++;toast('GOAL FOR LAGOS! '+match.teamGoals+' - '+match.opponentGoals);resetCareerMatchKickoff();}else{b.z=north+.5;v.vz=Math.abs(v.vz)*.55;}}
+  else if(previousZ<south&&b.z>=south){if(insideGoal){match.opponentGoals++;toast('OPPOSITION GOAL · '+match.teamGoals+' - '+match.opponentGoals);resetCareerMatchKickoff();}else{b.z=south-.5;v.vz=-Math.abs(v.vz)*.55;}}
+  if(Math.abs(b.x-x)>pitchW/2-1){b.x=x+Math.sign(b.x-x)*(pitchW/2-1);v.vx=-v.vx*.6;}
+  if(match.time<=0||pl.dead>0){careerMatchFinish();return;}
+  const seconds=Math.max(0,Math.ceil(match.time));
+  footballHud.textContent=s.name+' · LAGOS '+match.teamGoals+' - '+match.opponentGoals+' OPP · '+Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0')+' · '+match.goals+' PLAYER GOALS · E PASS · J SHOOT';
+}
+function careerTryPromotion(){
+  const next=career.stage===0?career.training>=1&&career.matches>=3&&career.reputation>=35
+    :career.stage===1?career.matches>=6&&career.reputation>=90
+    :career.stage===2?career.matches>=10&&career.reputation>=180:false;
+  if(!next)return'';
+  career.stage++;const bonus=[0,5000000,12000000,30000000][career.stage];career.wallet+=bonus;
+  return' · PROMOTED: '+CAREER_STAGES[career.stage]+' (+'+money(bonus)+')';
+}
+function careerMatchFinish(){
+  if(!careerFootball||careerFootball.type!=='match')return;
+  const match=careerFootball,won=match.teamGoals>match.opponentGoals,draw=match.teamGoals===match.opponentGoals;
+  const base=[2500000,4000000,6500000,9000000][career.stage],reward=base+match.goals*1000000+(won?2000000:draw?750000:0);
+  career.matches++;career.wins+=won?1:0;career.goals+=match.goals;career.wallet+=reward;
+  career.reputation+=Math.max(3,match.teamGoals*5+match.goals*4+(won?8:draw?3:0));
+  career.energy=clamp(career.energy-22,0,100);career.fitness=clamp(career.fitness-12,0,100);career.mood=clamp(career.mood+(won?9:draw?2:-6),0,100);
+  career.stats.pace=clamp(career.stats.pace+(match.goals||won?1:0),1,99);
+  const promotion=careerTryPromotion();persistCareer();
+  for(const actor of careerMatchActors)scene.remove(actor.root);careerMatchActors=[];
+  footballBall.visible=false;footballBall.userData.vx=footballBall.userData.vz=0;if(footballMarker)footballMarker.visible=false;
+  pl.g.position.set(match.return.x,0,match.return.z);keepInBounds(pl.g.position,.5);pl.face=cy=camH=match.return.face;pl.g.rotation.y=pl.face;
+  careerFootball=null;nav=null;$('hint').style.display='none';footballHud.style.display='none';document.body.classList.remove('football-match');
+  $('ba').textContent='ENTER';$('bp').textContent='PUNCH';$('bp').classList.add('w');$('bp').classList.remove('d');
+  toast((won?'FULL-TIME WIN':draw?'FULL-TIME DRAW':'FULL-TIME LOSS')+' · '+match.teamGoals+' - '+match.opponentGoals+' · '+match.goals+' player goal'+(match.goals===1?'':'s')+' · +'+money(reward)+promotion);
+  if(careerPanel.style.display==='block')renderCareerPanel();
+}
+function careerMatch(){careerMatchBegin();}
+function careerBuyCar(type,price){
+  if(career.cars.includes(type)){toast('You already own that career vehicle.');return;}
+  const owned=new Set(vehicles.filter(v=>v.garage).map(v=>v.type));if(!owned.has(type)&&owned.size>=8){toast('Garage full · make room before buying another car.');return;}
+  if(career.wallet<price){toast('Not enough career funds.');return;}
+  let vehicle=vehicles.find(v=>v.type===type&&v.price>0);
+  if(!vehicle)vehicle=addVeh(type,SHOPS.autos.x+8,SHOPS.autos.z-10,Math.PI/2,'parked');
+  career.wallet-=price;career.cars.push(type);vehicle.price=0;vehicle.keep=vehicle.owned=vehicle.garage=1;vehicle.home={x:SHOPS.autos.x+8,z:SHOPS.autos.z-10,h:Math.PI/2};
+  vehicle.g.position.set(vehicle.home.x,0,vehicle.home.z);vehicle.s.h=vehicle.home.h;vehicle.g.rotation.y=vehicle.home.h;hideTag(vehicle);
+  sv.cars=[...new Set([...(sv.cars||[]),type])].slice(0,8);persistCareer();toast(vehicle.sp.name+' added to your garage.');renderCareerPanel();
+}
+function careerBuyHome(id,price){
+  if(career.properties.includes(id)){toast('That career residence is already yours.');return;}
+  const home=CAREER_HOMES.find(h=>h[0]===id);if(!home)return;
+  if(career.wallet<price){toast('Not enough career funds.');return;}
+  if(career.reputation<home[3]){toast('Build more reputation before buying this residence.');return;}
+  career.wallet-=price;career.properties.push(id);
+  if(!sv.house){sv.house=1;sv.unit=(Math.random()*BLD.length)|0;placeMyDoor();}
+  persistCareer();toast(home[1]+' purchased · saved to your career.');renderCareerPanel();
+}
+function renderCareerPanel(){
+  careerPanel.replaceChildren();closeButton(careerPanel);
+  const title=document.createElement('div');title.style.cssText='font-size:20px;font-weight:900;color:#ffd24a';title.textContent='FOOTBALL CAREER';careerPanel.appendChild(title);
+  const intro=document.createElement('div');intro.style.cssText='opacity:.75;margin:3px 0 10px';intro.textContent='Build an academy career through live training and playable stadium matches · separate wallet · autosaves locally and to your signed-in save.';careerPanel.appendChild(intro);
+  const name=document.createElement('input');name.value=career.name;name.maxLength=24;name.placeholder='Player name';name.setAttribute('aria-label','Career player name');name.addEventListener('change',()=>{career.name=name.value.trim().slice(0,24)||'Rookie';persistCareer();renderCareerPanel();});careerPanel.appendChild(name);
+  const pos=document.createElement('select');pos.setAttribute('aria-label','Playing position');CAREER_POSITIONS.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;pos.appendChild(o);});pos.value=career.position;pos.addEventListener('change',()=>{career.position=pos.value;persistCareer();renderCareerPanel();});careerPanel.appendChild(pos);
+  const stage=document.createElement('div');stage.style.cssText='margin:10px 0;padding:10px;border-radius:12px;background:rgba(255,255,255,.08);border-left:4px solid #ffd24a';
+  stage.innerHTML='<b>'+CAREER_STAGES[career.stage]+'</b><div style=\"font-size:12px;opacity:.8;margin-top:3px\">Match '+career.matches+' · Wins '+career.wins+' · Goals '+career.goals+' · Reputation '+career.reputation+'</div><div style=\"font-size:12px;color:#8be28b;margin-top:3px\">Career funds '+money(career.wallet)+'</div>';careerPanel.appendChild(stage);
+  const nextGoal=career.stage===0?'Promotion target: complete a ball trial, play 3 matches, and reach 35 REP.':career.stage===1?'Promotion target: play 6 matches and reach 90 REP.':career.stage===2?'Promotion target: play 10 matches and reach 180 REP.':'You reached the top tier. Keep playing to improve your stats and build your lifestyle.';
+  const roadmap=document.createElement('div');roadmap.style.cssText='font-size:11px;opacity:.8;margin:-4px 0 9px';roadmap.textContent='CAREER PATH · Academy → Reserve → First Team → Lagos Star. '+nextGoal;careerPanel.appendChild(roadmap);
+  const meters=document.createElement('div');meters.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:6px';
+  for(const [label,value] of [['Fitness',career.fitness],['Energy',career.energy],['Mood',career.mood]]){const card=document.createElement('div');card.style.cssText='padding:7px;border-radius:9px;background:rgba(0,0,0,.24);font-size:11px';card.innerHTML='<b>'+label+' '+Math.round(value)+'</b><div style=\"height:4px;margin-top:4px;border-radius:4px;background:linear-gradient(90deg,#35d37f '+value+'%,rgba(255,255,255,.15) '+value+'%)\"></div>';meters.appendChild(card);}careerPanel.appendChild(meters);
+  const stats=document.createElement('div');stats.style.cssText='margin:8px 0;font-size:12px;opacity:.85';stats.textContent='PACE '+Math.round(career.stats.pace)+' · PASSING '+Math.round(career.stats.passing)+' · SHOOTING '+Math.round(career.stats.shooting)+' · CONTROL '+Math.round(career.stats.control)+' · Academy drills '+career.training;careerPanel.appendChild(stats);
+  const button=(label,fn,disabled=false)=>{const b=document.createElement('button');b.className='sbtn';b.textContent=label;b.disabled=disabled;if(disabled)b.style.opacity='.48';b.addEventListener('click',fn);careerPanel.appendChild(b);return b;};
+  button(careerFootball?'DRILL IN PROGRESS':'GPS: ACADEMY TRAINING GROUND',()=>{setNav(CAREER_PITCH.x,CAREER_PITCH.z+25,'Academy Training Ground');careerPanel.style.display='none';toast('Follow the GPS to the training pitch.');},!!careerFootball);
+  button('START LIVE BALL TRIAL · 90s',careerBeginTraining,!!careerFootball);
+  button(careerFootball&&careerFootball.type==='match'?'MATCH IN PROGRESS':'PLAY STADIUM MATCH · 2:30',careerMatch,!!careerFootball||pl.mode!=='walk');
+  for(const stadium of CAREER_STADIUMS){const route=button('GPS: '+stadium.name,()=>{setNav(stadium.x,stadium.doorZ,stadium.name);careerPanel.style.display='none';},!!careerFootball);route.style.cssText+=';padding:8px;margin-top:5px;font-size:12px';}
+  const stadiumNote=document.createElement('div');stadiumNote.style.cssText='font-size:11px;opacity:.72;margin-top:5px';stadiumNote.textContent='Enter the marked stadium or start a match here. Move with WASD / left stick; E passes and J shoots. Win, score, train, and earn promotion.';careerPanel.appendChild(stadiumNote);
+  const activities=document.createElement('div');activities.style.cssText='margin-top:12px;padding:9px;border-radius:12px;background:rgba(255,255,255,.06)';activities.innerHTML='<b>OFF-PITCH ROUTINE</b><div style=\"font-size:11px;opacity:.75;margin:3px 0\">Visit city venues to affect fitness, energy, and mood. Follow GPS, then use E/ENTER at the venue.</div>';careerPanel.appendChild(activities);
+  for(const[id,label]of[['gym','Iron Palm Fitness'],['hotel','Lagoon View Hotel'],['velvet','The Velvet Room'],['cinema','Surulere Cinema'],['suya','Mama Suya']]){
+    const shop=SHOPS[id];if(!shop)continue;const b=document.createElement('button');b.className='sbtn';b.style.cssText='padding:8px;margin-top:5px;font-size:12px';b.textContent='GPS: '+label;b.addEventListener('click',()=>{setNav(shop.mx,shop.mz,label);careerPanel.style.display='none';});activities.appendChild(b);
+  }
+  const assets=document.createElement('div');assets.style.cssText='margin-top:12px;padding:9px;border-radius:12px;background:rgba(255,255,255,.06)';assets.innerHTML='<b>CAREER ASSETS</b><div style=\"font-size:11px;opacity:.75;margin:3px 0\">Cars join your city garage. Villa and mansion exteriors are city landmarks; the starter apartment opens your existing home interior.</div>';careerPanel.appendChild(assets);
+  for(const[type,price]of CAREER_CARS){const owned=career.cars.includes(type),stock=SPECS[type];if(!stock)continue;button((owned?'OWNED · ': '')+stock.name+' · '+money(price),()=>careerBuyCar(type,price),owned||career.wallet<price);}
+  for(const[id,label,price]of CAREER_HOMES){const owned=career.properties.includes(id),home=CAREER_HOMES.find(q=>q[0]===id);button((owned?'OWNED · ': '')+label+' · '+money(price)+(career.reputation<home[3]?' · need '+home[3]+' REP':''),()=>careerBuyHome(id,price),owned||career.wallet<price||career.reputation<home[3]);}
+}
+function openCareerPanel(){
+  if(careerPanel.style.display==='block'){careerPanel.style.display='none';return;}
+  if(careerFootball){toast('Finish the live ball trial before opening career options.');return;}
+  document.querySelectorAll('.pn').forEach(panel=>panel.style.display='none');renderCareerPanel();careerPanel.style.display='block';
+}
+function careerResidenceNear(){
+  if(pl.mode!=='walk'||pl.dead)return null;
+  return CAREER_RESIDENCES.find(home=>Math.hypot(pl.g.position.x-home.x,pl.g.position.z-home.doorZ)<5)||null;
+}
+function careerResidenceInteract(){
+  const home=careerResidenceNear();if(!home)return false;
+  openCareerPanel();toast((career.properties.includes(home.id)?'Career residence · ':'Residence for sale · ')+home.name);
+  return true;
+}
+function careerStadiumInteract(){
+  if(pl.mode!=='walk'||pl.dead||careerFootball)return false;
+  const stadium=CAREER_STADIUMS.find(item=>Math.hypot(pl.g.position.x-item.x,pl.g.position.z-item.doorZ)<7);
+  if(!stadium)return false;
+  openCareerPanel();toast(stadium.name+' · start a playable career match from the career panel.');
+  return true;
+}
+const careerCloseMenus=closeMenus;closeMenus=function(){if(careerPanel.style.display==='block'){careerPanel.style.display='none';return true;}return careerCloseMenus();};
 function openCityShop(){const s=shopNear();if(!s)return false;openShopId=s.id;cp.style.display=chp.style.display=mpn.style.display=racePanel.style.display='none';renderCityShop();cityPanel.style.display='block';return true;}
 function statBar(l,v){return '<div style="display:flex;align-items:center;gap:5px;font-size:10px;margin-top:2px"><span style="width:34px;opacity:.7">'+l+'</span><span style="flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden"><span style="display:block;height:100%;width:'+Math.round(v*100)+'%;background:linear-gradient(90deg,#ffd24a,#ff5a3a)"></span></span></div>';}
 function renderArms(){
