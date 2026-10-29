@@ -71,6 +71,63 @@ create table if not exists public.race_participants (
   primary key (race_id, user_id)
 );
 
+create table if not exists public.game_access_allowlist (
+  email text primary key,
+  created_at timestamptz not null default now(),
+  created_by uuid references auth.users(id) on delete set null,
+  constraint game_access_allowlist_email_lowercase check (email = lower(btrim(email)))
+);
+
+alter table public.game_access_allowlist enable row level security;
+revoke all on public.game_access_allowlist from anon, authenticated;
+
+-- Existing Supabase users retain access; only the Edge Function can change this list.
+insert into public.game_access_allowlist(email)
+  select lower(btrim(email))
+  from auth.users
+  where email is not null and btrim(email) <> ''
+  on conflict (email) do nothing;
+
+create or replace function public.allow_new_game_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.email is not null and btrim(new.email) <> '' then
+    insert into public.game_access_allowlist(email)
+      values (lower(btrim(new.email)))
+      on conflict (email) do nothing;
+  end if;
+  return new;
+end
+$$;
+
+revoke all on function public.allow_new_game_user() from public, anon, authenticated;
+
+drop trigger if exists allow_new_game_user_access on auth.users;
+create trigger allow_new_game_user_access
+  after insert on auth.users
+  for each row execute function public.allow_new_game_user();
+
+create or replace function public.is_game_access_allowed()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.game_access_allowlist as allowed
+    where allowed.email = lower(btrim(coalesce(auth.jwt() ->> 'email', '')))
+  );
+$$;
+
+revoke all on function public.is_game_access_allowed() from public, anon;
+grant execute on function public.is_game_access_allowed() to authenticated;
+
 alter table public.profiles enable row level security;
 alter table public.player_saves enable row level security;
 alter table public.owned_vehicles enable row level security;
@@ -225,6 +282,9 @@ begin
   if v_user is null then
     raise exception 'Authentication required';
   end if;
+  if not public.is_game_access_allowed() then
+    raise exception 'Game access is not allowed for this account';
+  end if;
   if p_claim_date is distinct from v_today then
     raise exception 'Daily login claim date is invalid';
   end if;
@@ -347,5 +407,38 @@ begin
   ) then
     alter publication supabase_realtime add table public.friendships;
   end if;
+end
+$$;
+
+-- Only allow-listed Supabase accounts can use game data. Existing users are
+-- seeded above; the admin-users Edge Function is the only supported writer.
+do $$
+declare
+  table_name text;
+begin
+  foreach table_name in array array[
+    'profiles',
+    'player_saves',
+    'owned_vehicles',
+    'discoveries',
+    'game_stats',
+    'chat_messages',
+    'friendships',
+    'races',
+    'race_participants',
+    'daily_login_claims'
+  ]
+  loop
+    execute format(
+      'drop policy if exists %I on public.%I',
+      'Allowed game accounts only',
+      table_name
+    );
+    execute format(
+      'create policy %I on public.%I as restrictive for all to authenticated using (public.is_game_access_allowed()) with check (public.is_game_access_allowed())',
+      'Allowed game accounts only',
+      table_name
+    );
+  end loop;
 end
 $$;

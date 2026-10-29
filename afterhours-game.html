@@ -157,7 +157,18 @@ body.touch.drive.heli #flightSlideR{bottom:calc(env(safe-area-inset-bottom,0px) 
 <script>
 const T=THREE,V3=T.Vector3,$=id=>document.getElementById(id),pointLights=[];
 T.PointLight=class extends T.PointLight{constructor(...args){super(...args);this.userData.baseLightVisible=this.visible;pointLights.push(this);}};
-const db=window.supabase.createClient('https://oxemxfpqfdagxpnfdadp.supabase.co','sb_publishable_NM0HOY_18W_79rQdnvJTjg_vjuKPquw',{auth:{persistSession:true,autoRefreshToken:true,storage:window.localStorage,storageKey:'ah_auth'}});
+const SUPABASE_URL='https://oxemxfpqfdagxpnfdadp.supabase.co',SUPABASE_ANON_KEY='sb_publishable_NM0HOY_18W_79rQdnvJTjg_vjuKPquw';
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,storage:window.localStorage,storageKey:'ah_auth'}});
+async function adminUsersRequest(payload){
+  const{data,error}=await db.auth.getSession();
+  if(error)throw error;
+  if(!data.session)throw new Error('Sign in before using account administration.');
+  const response=await fetch(SUPABASE_URL+'/functions/v1/admin-users',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+data.session.access_token},body:JSON.stringify(payload)});
+  let result;
+  try{result=await response.json();}catch(error){throw new Error('Account service returned an invalid response.');}
+  if(!response.ok)throw new Error(result.error||'Account service request failed.');
+  return result;
+}
 const mobile=('ontouchstart' in window)||(navigator.maxTouchPoints>0)||matchMedia('(pointer:coarse)').matches;
 if(mobile)document.body.classList.add('touch');
 addEventListener('touchstart',()=>document.body.classList.add('touch'),{once:true,passive:true});
@@ -1429,12 +1440,18 @@ async function saveCloud(){
 }
 async function loadCloud(user){
   if(!user||cloudUser&&cloudUser.id===user.id)return;
+  cloudUser=user;cloudReady=false;
+  let gameAccess;
+  try{gameAccess=await adminUsersRequest({action:'check'});}
+  catch(error){cloudUser=null;console.error('Game access check failed:',error);$('authState').textContent=error.message+' Run the access-list setup, then try again.';return;}
+  if(!gameAccess.allowed){cloudUser=null;$('authState').textContent='This email is not on the game access list. Ask the game admin.';await db.auth.signOut();return;}
+  $('adminUserTools').style.display=gameAccess.admin?'block':'none';
+  if(gameAccess.admin)loadAdminUsers().catch(error=>{console.error('Admin user list failed:',error);$('adminUsersStatus').textContent=error.message;});
   const importingLocal=!sv.uid;
   if(sv.uid&&sv.uid!==user.id){
     sv={nm:'',lk:[0xb3001b,0x1a1a1f,0x5a3a22,0x0a0a0a],house:0,cars:[],seen:[],uid:user.id,guns:[],ammo:{},gang:null};career=readCareer(user.id)||newCareer();pl.eq=null;weaponHud();
     cash=500000000;done=0;earned=0;
   }else sv.uid=user.id;
-  cloudUser=user;cloudReady=false;
   let loaded;
   try{loaded=await Promise.all([
       db.from('profiles').select('display_name,appearance').eq('user_id',user.id).maybeSingle(),
@@ -1471,28 +1488,68 @@ async function loadCloud(user){
   $('authState').textContent='Signed in: '+(sv.nm||user.email||'player');
   $('authOut').style.display='block';toast('Cloud save loaded');
 }
+const USERNAME_AUTH_DOMAIN='users.gtasim.invalid';
+function usernameAuthEmail(value){
+  const username=value.trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9_-]{2,23}$/.test(username)?username+'@'+USERNAME_AUTH_DOMAIN:null;
+}
 async function authAction(){
   const email=$('authEmail').value.trim(),password=$('authPassword').value;
   if(!email||!password){$('authState').textContent='Enter your email and password.';return;}
   $('authState').textContent='Connecting…';
-  try{const {data,error}=await db.auth.signInWithPassword({email,password});
+  try{
+    const loginEmail=email.includes('@')?email:usernameAuthEmail(email);
+    if(!loginEmail){$('authState').textContent='Use a username with 3–24 letters, numbers, underscores, or hyphens.';return;}
+    const {data,error}=await db.auth.signInWithPassword({email:loginEmail,password});
     if(error){$('authState').textContent=error.message;return;}
     if(data.user)await loadCloud(data.user);
   }catch(error){console.error('Sign-in failed:',error);$('authState').textContent='Sign-in failed. Check your connection.';}
 }
 async function authCreate(){
-  const email=$('authEmail').value.trim(),password=$('authPassword').value;
-  if(!email||password.length<8){$('authState').textContent='Enter an email and a password of at least 8 characters.';return;}
+  const username=$('authEmail').value.trim(),email=usernameAuthEmail(username),password=$('authPassword').value;
+  if(!email){$('authState').textContent='Choose a username with 3–24 letters, numbers, underscores, or hyphens.';return;}
+  if(password.length<8){$('authState').textContent='Use a password of at least 8 characters.';return;}
   $('authState').textContent='Creating account…';
-  try{const {data,error}=await db.auth.signUp({email,password});
+  try{
+    const{data,error}=await db.auth.signUp({email,password,options:{data:{username:username.toLowerCase()}}});
     if(error){$('authState').textContent=error.message;return;}
     if(data.user&&data.session)await loadCloud(data.user);
-    else $('authState').textContent='Check your email to confirm, then sign in.';
+    else $('authState').textContent='Account created, but no sign-in session was returned. Ask the game admin to disable email confirmations in Supabase Auth settings.';
   }catch(error){console.error('Sign-up failed:',error);$('authState').textContent='Sign-up failed. Check your connection.';}
+}
+async function loadAdminUsers(){
+  const{users}=await adminUsersRequest({action:'list'}),list=$('adminUsersList');
+  list.replaceChildren();
+  for(const user of users){
+    const row=document.createElement('div'),label=document.createElement('span'),remove=document.createElement('button');
+    row.style.cssText='display:flex;align-items:center;gap:6px;padding:5px 0;border-top:1px solid rgba(255,255,255,.1)';
+    label.style.cssText='flex:1;min-width:0;overflow-wrap:anywhere';
+    label.textContent=user.email;
+    remove.type='button';remove.className='sbtn';remove.style.cssText='width:auto;margin:0;padding:5px 8px';
+    remove.textContent='REMOVE';remove.disabled=user.email.toLowerCase()===cloudUser.email.toLowerCase();
+    remove.addEventListener('click',async()=>{
+      remove.disabled=true;
+      try{await adminUsersRequest({action:'remove',email:user.email});await loadAdminUsers();}
+      catch(error){console.error('Game access removal failed:',error);$('adminUsersStatus').textContent=error.message;remove.disabled=false;}
+    });
+    row.append(label,remove);list.appendChild(row);
+  }
+  $('adminUsersStatus').textContent=users.length+' allowed email'+(users.length===1?'':'s');
+}
+async function createAdminUser(){
+  const email=$('adminNewEmail').value.trim(),password=$('adminNewPassword').value,button=$('adminCreate');
+  button.disabled=true;$('adminUsersStatus').textContent='Creating account…';
+  try{
+    await adminUsersRequest({action:'create',email,password});
+    $('adminNewEmail').value='';$('adminNewPassword').value='';
+    $('adminUsersStatus').textContent='Account created and added to the game access list.';
+    await loadAdminUsers();
+  }catch(error){console.error('Admin account creation failed:',error);$('adminUsersStatus').textContent=error.message;}
+  finally{button.disabled=false;}
 }
 db.auth.onAuthStateChange((event,session)=>{
   if(session&&session.user){setTimeout(()=>loadCloud(session.user),0);}
-  else if(event==='SIGNED_OUT'){cloudUser=null;cloudReady=false;room=null;friendRows=[];friendProfiles.clear();friendsLoadedFor='';trackedFriend=null;trackedFriendWasOnline=false;nav=null;dmUnread.clear();updateChatButton();if(liveChannel)db.removeChannel(liveChannel);if(friendsPanel)renderFriendsPanel();toast('Signed out');}
+  else if(event==='SIGNED_OUT'){cloudUser=null;cloudReady=false;room=null;$('adminUserTools').style.display='none';friendRows=[];friendProfiles.clear();friendsLoadedFor='';trackedFriend=null;trackedFriendWasOnline=false;nav=null;dmUnread.clear();updateChatButton();if(liveChannel)db.removeChannel(liveChannel);if(friendsPanel)renderFriendsPanel();toast('Signed out');}
 });
 db.auth.getSession().then(({data,error})=>{
   if(error){console.error('Session lookup failed:',error);$('authState').textContent='Could not restore sign-in.';}
@@ -1514,11 +1571,17 @@ const kp=pnl('kp');kp.style.cssText='top:62px;left:auto;right:8px;transform:none
 {const R=[['W A S D','Move / drive'],['Shift','Run · drift in car'],['Space','Jump · BRAKE in car'],['E / F','Interact · enter / exit car · shops'],['J / click','Attack · hold for auto-fire'],['Helicopter','W/S move · A/D turn · Space climb · Shift descend'],['Tank','J / FIRE button shoots the cannon'],['R','Reload magazine'],['Q','Switch weapon'],['Z','Scope on/off (A/D aim, W/S zoom)'],['C / V','Camera view'],['H','Hover mode'],['Drag mouse','Look around'],['Touch ATTACK','Tap / hold to fire'],['RELOAD','Tap to reload on touch'],['Y / N','Accept / decline ride-along'],['🏠','Home: GPS, enter, invite friends'],['1-5','Emotes (wave, dance, laugh, salute, flex)'],['Esc','Close menus']];
 kp.innerHTML='<b>Controls</b><table style="width:100%;margin-top:6px;border-collapse:collapse">'+R.map(r=>'<tr><td style="padding:3px 6px 3px 0;white-space:nowrap;color:#ffd24a;font-weight:700">'+r[0]+'</td><td style="padding:3px 0">'+r[1]+'</td></tr>').join('')+'</table><div style="opacity:.7;margin-top:6px">Touch: left stick moves, buttons on the right act.</div>';
 closeButton(kp);mkBtn('⌨️',(innerWidth>=700?212:172)+162,()=>tog(kp));}
-cp.innerHTML='<b>Account &amp; character</b><div id="authState" style="font-size:12px;margin:6px 0">Not signed in · progress is local only</div><input id="authEmail" type="email" autocomplete="email" placeholder="Email"><input id="authPassword" type="password" autocomplete="current-password" placeholder="Password (8+ characters)" style="margin:6px 0"><div style="display:flex;gap:6px"><button class="sbtn" id="authIn" style="margin:0">SIGN IN</button><button class="sbtn" id="authNew" style="margin:0">SIGN UP</button></div><button class="sbtn" id="authOut" style="display:none">SIGN OUT</button><hr><b>Your character</b><input id="cnm" maxlength="14" placeholder="Name" style="margin:8px 0"><div id="csw"></div><button class="sbtn" id="cok">DONE</button>';
+cp.innerHTML='<b>Account &amp; character</b><div id="authState" style="font-size:12px;margin:6px 0">Not signed in · progress is local only</div><input id="authEmail" type="email" autocomplete="email" placeholder="Email"><input id="authPassword" type="password" autocomplete="current-password" placeholder="Password (8+ characters)" style="margin:6px 0"><button class="sbtn" id="authIn">SIGN IN</button><div style="font-size:11px;opacity:.75;margin:6px 0">Accounts are created by the game admin. Ask them to add your email, then sign in here.</div><button class="sbtn" id="authOut" style="display:none">SIGN OUT</button><div id="adminUserTools" style="display:none;margin-top:12px"><hr><b>Admin · Create player</b><input id="adminNewEmail" type="email" autocomplete="off" placeholder="New player email" style="margin-top:8px"><input id="adminNewPassword" type="password" autocomplete="new-password" placeholder="Temporary password (8+ characters)" style="margin:6px 0"><button class="sbtn" id="adminCreate">CREATE ACCOUNT</button><div id="adminUsersStatus" style="font-size:11px;margin:6px 0"></div><div id="adminUsersList"></div></div><hr><b>Your character</b><input id="cnm" maxlength="14" placeholder="Name" style="margin:8px 0"><div id="csw"></div><button class="sbtn" id="cok">DONE</button>';
+const authSignIn=$('authIn'),authNote=authSignIn.nextElementSibling,authActions=document.createElement('div'),authSignUp=document.createElement('button'),accountInput=$('authEmail');
+accountInput.type='text';accountInput.autocomplete='username';accountInput.placeholder='Username (or existing account email)';
+authActions.style.cssText='display:flex;gap:6px';
+authSignIn.style.margin='0';authSignUp.type='button';authSignUp.className='sbtn';authSignUp.style.margin='0';authSignUp.textContent='SIGN UP';authSignUp.addEventListener('click',authCreate);
+authSignIn.before(authActions);authActions.append(authSignIn,authSignUp);authNote.textContent='New players use a username and password. Existing email accounts can still sign in.';
 closeButton(cp);closeButton(chp);
 closeButton($('shop'),()=>{if(shopV)closeShop();else hideH();});
  $('authIn').addEventListener('click',authAction);
- $('authNew').addEventListener('click',authCreate);
+ $('adminCreate').addEventListener('click',createAdminUser);
+
  $('authOut').addEventListener('click',async()=>{const{error}=await db.auth.signOut();if(error){console.error('Sign-out failed:',error);$('authState').textContent=error.message;}else{$('authState').textContent='Not signed in · progress is local only';$('authOut').style.display='none';}});
 {const PAL=[0xb3001b,0x1f6feb,0x2ea043,0xf0b800,0xffffff,0x111111,0x8a3ffc,0xff7a00],SK=[0x3b2416,0x5a3a22,0x7a5030,0x8d5f3a,0xc68642,0xf1c27d],HR=[0x0a0a0a,0x3b2416,0x8a6f4d,0xb3001b,0xeeeeee];
   [['Shirt',PAL,0],['Pants',PAL,1],['Skin',SK,2],['Hair',HR,3]].forEach(([n,P,k])=>{const d=document.createElement('div');d.textContent=n;

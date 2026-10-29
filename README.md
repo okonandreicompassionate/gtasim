@@ -1,8 +1,33 @@
 "# gtasim" 
 
-## Setup
+## Account setup
 
-For account-based daily streaks, apply the updated [Supabase schema](./supabase-schema.sql) in the project's Supabase SQL Editor. The streak repair and migration logic runs on the server after the schema is updated.
+The game stays on static hosting and continues to use Supabase Auth for existing accounts, saves, friends, and chat. New players sign up with a username and password, without entering an email address. Usernames are mapped internally to non-deliverable Supabase Auth addresses; players do not receive email. A database trigger adds new Supabase Auth users to the game access list. Admins can also create accounts from the in-game admin panel through a Supabase Edge Function; no Render server or separate game host is needed.
+
+1. Run the full [Supabase schema](./supabase-schema.sql) in the project's Supabase SQL Editor. It seeds the private game access list from existing Supabase accounts, preserves their access, and automatically allow-lists future signups.
+2. In the Supabase Dashboard, enable public email sign-ups and disable **Confirm email** under **Authentication → Settings**. Disabling confirmation is required because new accounts use non-deliverable internal addresses. Existing email-based accounts can still sign in with their real email.
+3. Install and authenticate the [Supabase CLI](https://supabase.com/docs/guides/cli), then link the project:
+
+   ```sh
+   supabase link --project-ref oxemxfpqfdagxpnfdadp
+   ```
+
+4. Configure the comma-separated email address(es) allowed to administer account creation. Use the email address of an existing Supabase account:
+
+   ```sh
+   supabase secrets set GAME_ADMIN_EMAILS="admin@example.com"
+   ```
+
+5. Deploy the function:
+
+   ```sh
+   supabase functions deploy admin-users
+   ```
+
+   [`supabase/config.toml`](./supabase/config.toml) disables gateway JWT verification for this function because it validates the Supabase access token itself. The service-role key stays server-side in the Supabase Edge Function environment and must never be added to either HTML file.
+6. Publish the updated `index.html` and `afterhours-game.html` to the existing static host. Sign in with an email configured as `GAME_ADMIN_EMAILS`; the **Account & character** panel will show the admin form.
+
+The public sign-up form creates users through Supabase Auth with an internal username address; public Auth rate limits still apply. The admin form creates a confirmed Supabase Auth user and adds the email to the private game access list; it also lets an admin revoke game access without deleting the Supabase account. Username accounts have no email-based password recovery, so forgotten passwords require administrator help. All current Supabase users are initially allow-listed by the schema migration. The allow-list is enforced in the game and by restrictive database row-level security policies. Guest/local play remains available.
 
 ## Controls
 
